@@ -1,0 +1,7 @@
+{
+  "chest.name": "Singularity Chest",
+  "chest.description": "A high-tech storage unit capable of storing an infinite amount of items in a virtual dimension.",
+  "ui.title": "Singularity Storage",
+  "ui.capacity": "Capacity",
+  "ui.loading": "Loading..."
+}

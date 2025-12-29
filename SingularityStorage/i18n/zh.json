@@ -1,0 +1,7 @@
+{
+  "chest.name": "奇点箱",
+  "chest.description": "一个高科技存储单元，能够在虚拟维度中存储无限量的物品。",
+  "ui.title": "奇点存储",
+  "ui.capacity": "容量",
+  "ui.loading": "加载中..."
+}
