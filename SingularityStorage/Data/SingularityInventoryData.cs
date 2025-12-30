@@ -1,4 +1,8 @@
 using System.Collections.Generic;
+using System.IO;
+using System.Runtime.Serialization;
+using System.Xml.Serialization;
+using Newtonsoft.Json;
 using StardewValley;
 
 namespace SingularityStorage.Data
@@ -17,13 +21,80 @@ namespace SingularityStorage.Data
         /// Key: Qualified Item ID (e.g., "(O)128")
         /// Value: List of Item stacks.
         /// </summary>
+        [JsonIgnore]
         public Dictionary<string, List<Item>> Inventory { get; set; } = new Dictionary<string, List<Item>>();
+
+        /// <summary>
+        /// Comparison/Backup storage for serialization.
+        /// Stores the XML representation of items to ensure 100% fidelity.
+        /// </summary>
+        [JsonProperty("Items")]
+        public Dictionary<string, List<string>> SerializedInventory { get; set; } = new Dictionary<string, List<string>>();
 
         public SingularityInventoryData() { }
 
         public SingularityInventoryData(string guid)
         {
             this.GUID = guid;
+        }
+
+        [OnSerializing]
+        internal void OnSerializing(StreamingContext context)
+        {
+            this.SerializedInventory = new Dictionary<string, List<string>>();
+            // Use standard XmlSerializer for Item
+            XmlSerializer serializer = new XmlSerializer(typeof(Item));
+
+            foreach (var kvp in this.Inventory)
+            {
+                var xmlList = new List<string>();
+                foreach (var item in kvp.Value)
+                {
+                    if (item == null) continue;
+                    using (StringWriter writer = new StringWriter())
+                    {
+                        serializer.Serialize(writer, item);
+                        xmlList.Add(writer.ToString());
+                    }
+                }
+                this.SerializedInventory[kvp.Key] = xmlList;
+            }
+        }
+
+        [OnDeserialized]
+        internal void OnDeserialized(StreamingContext context)
+        {
+            this.Inventory = new Dictionary<string, List<Item>>();
+            XmlSerializer serializer = new XmlSerializer(typeof(Item));
+
+            if (this.SerializedInventory != null)
+            {
+                foreach (var kvp in this.SerializedInventory)
+                {
+                    var itemList = new List<Item>();
+                    foreach (var xml in kvp.Value)
+                    {
+                        try
+                        {
+                            using (StringReader reader = new StringReader(xml))
+                            {
+                                Item? item = (Item?)serializer.Deserialize(reader);
+                                if (item != null)
+                                {
+                                    // Fix stack size or other transient properties if needed
+                                    // item.fixStackSize(); 
+                                    itemList.Add(item);
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            // Ignore corrupted items
+                        }
+                    }
+                    this.Inventory[kvp.Key] = itemList;
+                }
+            }
         }
     }
 }

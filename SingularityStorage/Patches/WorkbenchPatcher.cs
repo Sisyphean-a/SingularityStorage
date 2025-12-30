@@ -16,7 +16,7 @@ namespace SingularityStorage.Patches
     [HarmonyPatch(typeof(CraftingPage))]
     public static class WorkbenchPatcher
     {
-        private static FieldInfo _materialContainersField;
+        private static FieldInfo? _materialContainersField;
 
         static WorkbenchPatcher()
         {
@@ -32,7 +32,7 @@ namespace SingularityStorage.Patches
         /// </summary>
         /// <param name="harmony"></param>
         /// <returns></returns>
-        public static MethodBase TargetMethod()
+        public static MethodBase? TargetMethod()
         {
             // 获取 CraftingPage 的所有构造函数
             var constructors = typeof(CraftingPage).GetConstructors(BindingFlags.Public | BindingFlags.Instance);

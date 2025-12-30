@@ -13,7 +13,7 @@ namespace SingularityStorage
         ** Properties
         *********/
         /// <summary>The singleton instance of this mod.</summary>
-        public static ModEntry Instance { get; private set; }
+        public static ModEntry? Instance { get; private set; }
 
         /*********
         ** Public methods
@@ -67,7 +67,8 @@ namespace SingularityStorage
                     var data = editor.AsDictionary<string, StardewValley.GameData.BigCraftables.BigCraftableData>().Data;
                     var itemData = new StardewValley.GameData.BigCraftables.BigCraftableData
                     {
-                        Name = this.Helper.Translation.Get("chest.name"),
+                        Name = "SingularityChest", // Internal name must be stable/English
+                        DisplayName = this.Helper.Translation.Get("chest.name"), // Localized name
                         Price = 1000,
                         Description = this.Helper.Translation.Get("chest.description"),
                         Texture = $"Mods/{this.ModManifest.UniqueID}/SingularityChest",
