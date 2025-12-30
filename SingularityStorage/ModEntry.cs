@@ -87,12 +87,11 @@ namespace SingularityStorage
                 e.Edit(editor =>
                 {
                     var data = editor.AsDictionary<string, string>().Data;
-                    // Format: materials / output quantity / output id / type / skill unlock / key
-                    // Using "true" for big craftable flag is important
-                    // "337 10 336 5 787 1/Home/{{ModId}}_SingularityChest/true/null"
+                    // Format: materials / output quantity / output id / type / skill unlock
                     // Iridium Bar (337) x10, Gold Bar (336) x5, Battery Pack (787) x1
                     string itemId = $"{this.ModManifest.UniqueID}_SingularityChest";
-                    data["Singularity Chest"] = $"337 10 336 5 787 1/Home/{itemId}/true/null";
+                    // Using "true" for BigCraftable
+                    data["Singularity Chest"] = $"337 1 336 5 787 1/Home/{itemId}/true/default"; 
                 });
             }
         }
@@ -104,7 +103,12 @@ namespace SingularityStorage
         {
             this.Monitor.Log("Save loaded. Initializing storage systems...", LogLevel.Debug);
             StorageManager.ClearCache();
-            // In a real scenario, we might pre-load here, but lazy loading is better.
+            
+            // Ensure player knows the recipe
+            if (!Game1.player.craftingRecipes.ContainsKey("Singularity Chest"))
+            {
+                Game1.player.craftingRecipes.Add("Singularity Chest", 0);
+            }
         }
 
         /// <summary>Raised before the game saves data.</summary>
