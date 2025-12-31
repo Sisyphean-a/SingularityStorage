@@ -14,6 +14,13 @@
     </ItemGroup>
 
     <ItemGroup>
+        <Reference Include="StardewUI">
+            <HintPath>$(GamePath)\Mods\StardewUI\StardewUI.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+    </ItemGroup>
+
+    <ItemGroup>
         <None Include="manifest.json" CopyToOutputDirectory="Always" />
         <None Include="content.json" CopyToOutputDirectory="Always" />
         <None Include="assets\**" CopyToOutputDirectory="Always" />
