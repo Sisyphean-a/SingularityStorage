@@ -8,6 +8,7 @@ using Microsoft.Xna.Framework.Input;
 using StardewModdingAPI;
 using StardewValley;
 using StardewValley.Menus;
+using StardewValley.Tools;
 using SingularityStorage.Network;
 
 namespace SingularityStorage.UI
@@ -35,6 +36,12 @@ namespace SingularityStorage.UI
         private List<Item?> FilteredInventory = new List<Item?>();
         private int CurrentPage = 0;
         private int ItemsPerPage => Config.StorageInventory.Columns * Config.StorageInventory.Rows;
+
+        // Categories
+        private List<ClickableComponent> CategoryTabs = new List<ClickableComponent>();
+        private string CurrentCategory = "All";
+        private readonly List<string> Categories = new List<string> { "All", "Weapons", "Tools", "Resources", "Misc" };
+        private string CachedCapacityText = "";
 
         // UI Components
         private InventoryMenu StorageInventory;
@@ -145,6 +152,18 @@ namespace SingularityStorage.UI
                 Game1.mouseCursors,
                 Game1.getSourceRectForStandardTileSheet(Game1.mouseCursors, 46),
                 1f);
+
+            // Initialize Category Tabs
+            this.CategoryTabs.Clear();
+            int tabX = this.xPositionOnScreen - 64; // Left of menu
+            int tabY = this.yPositionOnScreen + 64;
+            
+            for (int i = 0; i < this.Categories.Count; i++)
+            {
+                this.CategoryTabs.Add(new ClickableComponent(
+                    new Rectangle(tabX, tabY + (i * 64), 64, 64), 
+                    this.Categories[i]));
+            }
         }
 
         private void RefreshView()
@@ -170,32 +189,85 @@ namespace SingularityStorage.UI
                 .ToList();
 
             this.StorageInventory.actualInventory = pageItems.Cast<Item>().ToList();
+            
+            // Pad with nulls to fill the page, ensuring 36 slots appear
+            // Actually, InventoryMenu handles partial lists by just showing them.
+            // If the user wants to see empty slots, we might need to ensure the capacity limit visual is handled?
+            // The issue "cannot page flip" is because we are taking `ItemsPerPage` items.
+            // If FilteredInventory.Count > ItemsPerPage, pagination should work.
+            // Let's debug totalItems:
+            // int totalItems = this.FilteredInventory.Count;
+            
+            // Update Capacity Text
+           var (used, max) = StorageManager.GetCounts(this.SourceGuid);
+           this.CachedCapacityText = $"{used} / {max}";
+           
+           ModEntry.Instance.Monitor.Log($"RefreshView: Total={totalItems}, Pages={totalPages}, CurrentPage={this.CurrentPage}, Capacity={used}/{max}", LogLevel.Trace);
         }
 
         private void UpdateSearch()
         {
+            // Only re-apply filter if query changed
             string query = this.SearchBar?.Text?.Trim() ?? "";
-            
-            if (query == this.LastSearchText) return;
-            
+            if (query != this.LastSearchText)
+            {
+                 // ApplyFilters handles the logic and update
+                 this.ApplyFilters();
+            }
+            // ELSE: Do nothing. This prevents resetting CurrentPage to 0 every frame.
+        }
+
+        private void ApplyFilters()
+        {
+            string query = this.SearchBar?.Text?.Trim() ?? "";
             this.LastSearchText = query;
-            this.CurrentPage = 0;
+            this.CurrentPage = 0; // Reset page when filter applied
 
             if (Context.IsMainPlayer)
             {
-                if (string.IsNullOrEmpty(query))
+                IEnumerable<Item?> items = this.FullInventory;
+
+                // 1. Filter by Category
+                if (this.CurrentCategory != "All")
                 {
-                    this.FilteredInventory = this.FullInventory;
+                    items = items.Where(item => IsItemInCategory(item, this.CurrentCategory));
                 }
-                else
+
+                // 2. Filter by Search
+                if (!string.IsNullOrEmpty(query))
                 {
-                    this.FilteredInventory = this.FullInventory
-                        .Where(item => item != null && item.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase))
-                        .ToList();
+                    items = items.Where(item => item != null && item.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
                 }
+
+                this.FilteredInventory = items.ToList();
             }
             
             this.RefreshView();
+        }
+
+        private bool IsItemInCategory(Item? item, string category)
+        {
+            if (item == null) return false;
+            switch (category)
+            {
+                case "Weapons":
+                    return item.Category == StardewValley.Object.weaponCategory;
+                case "Tools":
+                    return item is Tool && item.Category != StardewValley.Object.weaponCategory;
+                case "Resources":
+                    return item.Category == StardewValley.Object.GemCategory || 
+                           item.Category == StardewValley.Object.mineralsCategory ||
+                           item.Category == StardewValley.Object.metalResources ||
+                           item.Category == StardewValley.Object.buildingResources ||
+                           item.Category == StardewValley.Object.CraftingCategory ||
+                           item.Category == StardewValley.Object.fertilizerCategory;
+                case "Misc":
+                     return !IsItemInCategory(item, "Weapons") && 
+                            !IsItemInCategory(item, "Tools") && 
+                            !IsItemInCategory(item, "Resources");
+                default:
+                    return true;
+            }
         }
 
         public override void receiveLeftClick(int x, int y, bool playSound = true)
@@ -215,9 +287,14 @@ namespace SingularityStorage.UI
 
             if (this.NextPageButton != null && this.NextPageButton.containsPoint(x, y))
             {
-                this.CurrentPage++;
-                Game1.playSound("shwip");
-                this.RefreshView();
+                int totalItems = this.FilteredInventory.Count;
+                int totalPages = (int)Math.Ceiling(totalItems / (double)ItemsPerPage);
+                if (this.CurrentPage < totalPages - 1)
+                {
+                    this.CurrentPage++;
+                    Game1.playSound("shwip");
+                    this.RefreshView();
+                }
                 return;
             }
 
@@ -227,12 +304,32 @@ namespace SingularityStorage.UI
                 return;
             }
 
+            // Handle Category Tabs
+            foreach (var tab in this.CategoryTabs)
+            {
+                if (tab.containsPoint(x, y))
+                {
+                    if (this.CurrentCategory != tab.name)
+                    {
+                        this.CurrentCategory = tab.name;
+                        this.ApplyFilters(); // ApplyFilters resets page to 0
+                        Game1.playSound("smallSelect");
+                    }
+                    return;
+                }
+            }
+
             // Handle Storage Inventory clicks
             Item? clickedItem = this.StorageInventory.getItemAt(x, y);
             if (clickedItem != null && this.HeldItem == null)
             {
                 this.HeldItem = clickedItem;
                 this.StorageInventory.actualInventory.Remove(clickedItem);
+                
+                // We don't remove from FullInventory/FilteredInventory immediately here?
+                // Actually we do for consistency if we are "holding" it.
+                // But if we drop it back, we re-add.
+                // The issue is pagination. Removing from FilteredInventory shifts everything on next RefreshView.
                 this.FullInventory.Remove(clickedItem);
                 this.FilteredInventory.Remove(clickedItem);
                 
@@ -243,6 +340,7 @@ namespace SingularityStorage.UI
                 }
                 
                 Game1.playSound("dwop");
+                this.RefreshView(); // Update view to fill gap
                 return;
             }
 
@@ -264,16 +362,43 @@ namespace SingularityStorage.UI
                 {
                     if (Context.IsMainPlayer)
                     {
+                        ModEntry.Instance.Monitor.Log($"Attempting to add item: {this.HeldItem.Name} x{this.HeldItem.Stack}", LogLevel.Trace);
                         StorageManager.AddItem(this.SourceGuid, this.HeldItem);
                         
                         // Reload data from StorageManager to avoid duplicates
                         var data = StorageManager.GetInventory(this.SourceGuid);
                         this.FullInventory = data.Inventory.Values.SelectMany(x => x).Cast<Item?>().ToList();
-                        this.FilteredInventory = this.FullInventory;
+                        
+                        // Re-apply filters to ensure view is consistent
+                        // Note: ApplyFilters resets page to 0. 
+                        // If we are on page 5 and add an item, we jump to page 0? That's annoying.
+                        // We should try to stay on page.
+                        
+                        // 1. Filter by Category
+                        IEnumerable<Item?> items = this.FullInventory;
+                        if (this.CurrentCategory != "All") items = items.Where(item => IsItemInCategory(item, this.CurrentCategory));
+                        string query = this.SearchBar?.Text?.Trim() ?? "";
+                        if (!string.IsNullOrEmpty(query)) items = items.Where(item => item != null && item.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
+                        this.FilteredInventory = items.ToList();
+                        
+                        // Don't call ApplyFilters() because it resets page.
                     }
+
+                    if (this.HeldItem.Stack <= 0)
+                    {
+                        ModEntry.Instance.Monitor.Log("Item fully consumed.", LogLevel.Trace);
+                        this.HeldItem = null;
+                        Game1.playSound("stoneStep");
+                    }
+                    else
+                    {
+                        // Item was not fully added (capacity full)
+                        ModEntry.Instance.Monitor.Log("Storage Full - Item rejected/returned.", LogLevel.Warn);
+                        Game1.playSound("cancel");
+                        Game1.addHUDMessage(new HUDMessage("Storage Full", 3));
+                    }
+                    
                     this.RefreshView();
-                    this.HeldItem = null;
-                    Game1.playSound("stoneStep");
                     return;
                 }
 
@@ -299,14 +424,24 @@ namespace SingularityStorage.UI
                 // Try to add to player inventory
                 if (Game1.player.couldInventoryAcceptThisItem(storageItem))
                 {
+                    // Logic similar to Left Click
                     Game1.player.addItemToInventory(storageItem);
-                    this.StorageInventory.actualInventory.Remove(storageItem);
-                    this.FullInventory.Remove(storageItem);
-                    this.FilteredInventory.Remove(storageItem);
+                    // this.StorageInventory.actualInventory.Remove(storageItem); // Handled by RefreshView?
                     
                     if (Context.IsMainPlayer)
                     {
-                        StorageManager.RemoveItem(this.SourceGuid, storageItem);
+                         StorageManager.RemoveItem(this.SourceGuid, storageItem);
+                         
+                         // Reload and Re-filter
+                         var data = StorageManager.GetInventory(this.SourceGuid);
+                         this.FullInventory = data.Inventory.Values.SelectMany(i => i).Cast<Item?>().ToList();
+                         
+                         // Re-filter manual
+                        IEnumerable<Item?> items = this.FullInventory;
+                        if (this.CurrentCategory != "All") items = items.Where(item => IsItemInCategory(item, this.CurrentCategory));
+                        string query = this.SearchBar?.Text?.Trim() ?? "";
+                        if (!string.IsNullOrEmpty(query)) items = items.Where(item => item != null && item.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
+                        this.FilteredInventory = items.ToList();
                     }
                     
                     this.RefreshView();
@@ -323,15 +458,37 @@ namespace SingularityStorage.UI
                 
                 if (Context.IsMainPlayer)
                 {
-                    StorageManager.AddItem(this.SourceGuid, playerItem);
-                    
-                    // Reload data from StorageManager to avoid duplicates
-                    var data = StorageManager.GetInventory(this.SourceGuid);
-                    this.FullInventory = data.Inventory.Values.SelectMany(x => x).Cast<Item?>().ToList();
-                    this.FilteredInventory = this.FullInventory;
+                    // Similar to Left Click Logic: Check capacity via AddItem
+                     ModEntry.Instance.Monitor.Log($"Right-click transfer: {playerItem.Name} x{playerItem.Stack}", LogLevel.Trace);
+                     StorageManager.AddItem(this.SourceGuid, playerItem);
+                     
+                     var data = StorageManager.GetInventory(this.SourceGuid);
+                     this.FullInventory = data.Inventory.Values.SelectMany(i => i).Cast<Item?>().ToList();
+                     
+                     // Re-filter manual
+                    IEnumerable<Item?> items = this.FullInventory;
+                    if (this.CurrentCategory != "All") items = items.Where(item => IsItemInCategory(item, this.CurrentCategory));
+                    string query = this.SearchBar?.Text?.Trim() ?? "";
+                    if (!string.IsNullOrEmpty(query)) items = items.Where(item => item != null && item.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
+                    this.FilteredInventory = items.ToList();
                 }
+
+                if (playerItem.Stack <= 0)
+                {
+                    // Fully moved
+                    Game1.playSound("stoneStep");
+                }
+                else
+                {
+                    // Partially moved or rejected
+                     Game1.playSound("cancel");
+                     Game1.addHUDMessage(new HUDMessage("Storage Full", 3));
+                     // Note: playerItem reference should be updated by AddItem logic because it's a reference type?
+                     // Actually AddItem logic modifies the object. 
+                     // But we should ensure logic consistency. 
+                }
+                
                 this.RefreshView();
-                Game1.playSound("stoneStep");
                 return;
             }
         }
@@ -419,6 +576,34 @@ namespace SingularityStorage.UI
 
             // Draw OK button
             this.OkButton?.draw(b);
+
+            // Draw Category Tabs
+            foreach (var tab in this.CategoryTabs)
+            {
+                // Draw background
+                IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(384, 373, 18, 18), 
+                    tab.bounds.X, tab.bounds.Y, tab.bounds.Width, tab.bounds.Height, 
+                    this.CurrentCategory == tab.name ? Color.White : Color.Gray, 4f, false);
+                
+                // Draw Text (First 3 chars)
+                string label = tab.name.Length > 3 ? tab.name.Substring(0, 3) : tab.name;
+                if (tab.name == "All") label = "ALL";
+                
+                Vector2 labelSize = Game1.smallFont.MeasureString(label);
+                Utility.drawTextWithShadow(b, label, Game1.smallFont, 
+                    new Vector2(tab.bounds.X + (tab.bounds.Width - labelSize.X) / 2, tab.bounds.Y + (tab.bounds.Height - labelSize.Y) / 2), 
+                    Game1.textColor);
+            }
+
+            // Draw Capacity
+            if (!string.IsNullOrEmpty(this.CachedCapacityText))
+            {
+                 Vector2 capSize = Game1.smallFont.MeasureString(this.CachedCapacityText);
+                 Utility.drawTextWithShadow(b, this.CachedCapacityText, Game1.smallFont,
+                     new Vector2(this.StorageInventory.xPositionOnScreen + this.StorageInventory.width - capSize.X, 
+                                 this.StorageInventory.yPositionOnScreen + this.StorageInventory.height + 4), 
+                     Color.White);
+            }
 
             // Draw held item
             if (this.HeldItem != null)

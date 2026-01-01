@@ -17,6 +17,12 @@ namespace SingularityStorage.Data
         public string GUID { get; set; } = string.Empty;
 
         /// <summary>
+        /// The maximum number of items (not stacks) that can be stored.
+        /// Defaults to 36.
+        /// </summary>
+        public int MaxCapacity { get; set; } = 36;
+
+        /// <summary>
         /// The massive inventory storage.
         /// Key: Qualified Item ID (e.g., "(O)128")
         /// Value: List of Item stacks.
