@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -13,14 +14,27 @@ namespace SingularityStorage.UI
 {
     public class SingularityMenu : IClickableMenu
     {
+        // Configuration
+        private static MenuConfig? _config;
+        private static MenuConfig Config
+        {
+            get
+            {
+                if (_config == null)
+                {
+                    string configPath = Path.Combine(ModEntry.Instance!.Helper.DirectoryPath, "UI", "MenuConfig.json");
+                    _config = MenuConfig.Load(configPath);
+                }
+                return _config;
+            }
+        }
+
         // Core Data
         private string SourceGuid;
         private List<Item?> FullInventory = new List<Item?>(); 
         private List<Item?> FilteredInventory = new List<Item?>();
         private int CurrentPage = 0;
-        private const int ColumnsCount = 9; 
-        private const int RowsCount = 3; 
-        private const int ItemsPerPage = ColumnsCount * RowsCount; // 27
+        private int ItemsPerPage => Config.StorageInventory.Columns * Config.StorageInventory.Rows;
 
         // UI Components
         private InventoryMenu StorageInventory;
@@ -40,34 +54,30 @@ namespace SingularityStorage.UI
         {
             this.SourceGuid = guid;
 
-            // Calculate menu dimensions - updated based on wireframe
-            int menuWidth = 950;
-            int menuHeight = 750;
-            
-            this.xPositionOnScreen = (Game1.uiViewport.Width - menuWidth) / 2;
-            this.yPositionOnScreen = (Game1.uiViewport.Height - menuHeight) / 2;
-            this.width = menuWidth;
-            this.height = menuHeight;
+            // Load dimensions from config
+            this.width = Config.MenuDimensions.Width;
+            this.height = Config.MenuDimensions.Height;
+            this.xPositionOnScreen = (Game1.uiViewport.Width - this.width) / 2;
+            this.yPositionOnScreen = (Game1.uiViewport.Height - this.height) / 2;
 
-            // Initialize Storage Inventory (9 columns, 3 rows) - Position: x+32, y+180
+            // Initialize Storage Inventory from config
             this.StorageInventory = new InventoryMenu(
-                this.xPositionOnScreen + 32,
-                this.yPositionOnScreen + 180,
+                this.xPositionOnScreen + Config.StorageInventory.OffsetX,
+                this.yPositionOnScreen + Config.StorageInventory.OffsetY,
                 false,
                 new List<Item>(),
                 null,
                 ItemsPerPage,
-                RowsCount,
-                0,
-                0,
+                Config.StorageInventory.Rows,
+                Config.StorageInventory.SlotSpacing,
+                Config.StorageInventory.SlotSpacing,
                 true
             );
 
-            // Initialize Player Inventory - Position: x+32, y + height - 220
-            // Standard Player Inventory is 12 columns by 3 rows
+            // Initialize Player Inventory from config
             this.PlayerInventory = new InventoryMenu(
-                this.xPositionOnScreen + 32,
-                this.yPositionOnScreen + this.height - 220,
+                this.xPositionOnScreen + Config.PlayerInventory.OffsetX,
+                this.yPositionOnScreen + this.height - Config.PlayerInventory.OffsetFromBottom,
                 true
             );
 
@@ -89,37 +99,49 @@ namespace SingularityStorage.UI
 
         private void InitializeWidgets()
         {
-            int headerY = this.yPositionOnScreen + 100;
+            int headerY = this.yPositionOnScreen + Config.Header.OffsetY;
 
-            // Search Bar (x+200, headerY, w=400, h=36)
+            // Search Bar from config
             this.SearchBar = new TextBox(
                 Game1.content.Load<Texture2D>("LooseSprites\\textBox"), 
                 null, 
                 Game1.smallFont, 
                 Game1.textColor)
             {
-                X = this.xPositionOnScreen + 200,
-                Y = headerY, // Matches wireframe headerY + 0
-                Width = 400,
-                Height = 36 // Explicitly setting height target though TextBox might enforce texture height
+                X = this.xPositionOnScreen + Config.SearchBar.OffsetX,
+                Y = headerY,
+                Width = Config.SearchBar.Width,
+                Height = Config.SearchBar.Height
             };
 
-            // Page Buttons (Prev: x+42, Next: x+106)
+            // Page Buttons from config
             this.PrevPageButton = new ClickableTextureComponent(
-                new Rectangle(this.xPositionOnScreen + 42, headerY, 48, 44),
+                new Rectangle(
+                    this.xPositionOnScreen + Config.PageButtons.PrevOffsetX,
+                    headerY,
+                    Config.PageButtons.Width,
+                    Config.PageButtons.Height),
                 Game1.mouseCursors,
                 new Rectangle(352, 495, 12, 11),
                 4f);
 
             this.NextPageButton = new ClickableTextureComponent(
-                new Rectangle(this.xPositionOnScreen + 106, headerY, 48, 44),
+                new Rectangle(
+                    this.xPositionOnScreen + Config.PageButtons.NextOffsetX,
+                    headerY,
+                    Config.PageButtons.Width,
+                    Config.PageButtons.Height),
                 Game1.mouseCursors,
                 new Rectangle(365, 495, 12, 11),
                 4f);
 
-            // OK Button - x + width - 80, y + height - 80
+            // OK Button from config
             this.OkButton = new ClickableTextureComponent(
-                new Rectangle(this.xPositionOnScreen + this.width - 80, this.yPositionOnScreen + this.height - 80, 64, 64),
+                new Rectangle(
+                    this.xPositionOnScreen + this.width - Config.OkButton.OffsetFromRight,
+                    this.yPositionOnScreen + this.height - Config.OkButton.OffsetFromBottom,
+                    Config.OkButton.Size,
+                    Config.OkButton.Size),
                 Game1.mouseCursors,
                 Game1.getSourceRectForStandardTileSheet(Game1.mouseCursors, 46),
                 1f);
@@ -212,6 +234,14 @@ namespace SingularityStorage.UI
                 this.HeldItem = clickedItem;
                 this.StorageInventory.actualInventory.Remove(clickedItem);
                 this.FullInventory.Remove(clickedItem);
+                this.FilteredInventory.Remove(clickedItem);
+                
+                // Sync with StorageManager
+                if (Context.IsMainPlayer)
+                {
+                    StorageManager.RemoveItem(this.SourceGuid, clickedItem);
+                }
+                
                 Game1.playSound("dwop");
                 return;
             }
@@ -232,8 +262,15 @@ namespace SingularityStorage.UI
                 // Try to place in storage
                 if (this.StorageInventory.isWithinBounds(x, y))
                 {
-                    StorageManager.AddItem(this.SourceGuid, this.HeldItem);
-                    this.FullInventory.Add(this.HeldItem);
+                    if (Context.IsMainPlayer)
+                    {
+                        StorageManager.AddItem(this.SourceGuid, this.HeldItem);
+                        
+                        // Reload data from StorageManager to avoid duplicates
+                        var data = StorageManager.GetInventory(this.SourceGuid);
+                        this.FullInventory = data.Inventory.Values.SelectMany(x => x).Cast<Item?>().ToList();
+                        this.FilteredInventory = this.FullInventory;
+                    }
                     this.RefreshView();
                     this.HeldItem = null;
                     Game1.playSound("stoneStep");
@@ -253,7 +290,50 @@ namespace SingularityStorage.UI
 
         public override void receiveRightClick(int x, int y, bool playSound = true)
         {
-            // Quick transfer functionality could be added here
+            base.receiveRightClick(x, y, playSound);
+            
+            // Quick transfer from storage to player
+            Item? storageItem = this.StorageInventory.getItemAt(x, y);
+            if (storageItem != null)
+            {
+                // Try to add to player inventory
+                if (Game1.player.couldInventoryAcceptThisItem(storageItem))
+                {
+                    Game1.player.addItemToInventory(storageItem);
+                    this.StorageInventory.actualInventory.Remove(storageItem);
+                    this.FullInventory.Remove(storageItem);
+                    this.FilteredInventory.Remove(storageItem);
+                    
+                    if (Context.IsMainPlayer)
+                    {
+                        StorageManager.RemoveItem(this.SourceGuid, storageItem);
+                    }
+                    
+                    this.RefreshView();
+                    Game1.playSound("dwop");
+                }
+                return;
+            }
+            
+            // Quick transfer from player to storage
+            Item? playerItem = this.PlayerInventory.getItemAt(x, y);
+            if (playerItem != null)
+            {
+                Game1.player.removeItemFromInventory(playerItem);
+                
+                if (Context.IsMainPlayer)
+                {
+                    StorageManager.AddItem(this.SourceGuid, playerItem);
+                    
+                    // Reload data from StorageManager to avoid duplicates
+                    var data = StorageManager.GetInventory(this.SourceGuid);
+                    this.FullInventory = data.Inventory.Values.SelectMany(x => x).Cast<Item?>().ToList();
+                    this.FilteredInventory = this.FullInventory;
+                }
+                this.RefreshView();
+                Game1.playSound("stoneStep");
+                return;
+            }
         }
 
         public override void performHoverAction(int x, int y)
@@ -286,23 +366,26 @@ namespace SingularityStorage.UI
             // Draw main menu background
             Game1.drawDialogueBox(this.xPositionOnScreen, this.yPositionOnScreen, this.width, this.height, false, true);
 
-            // Draw title
-            // Draw title - yPositionOnScreen + 40
-            string title = "奇点存储 (Singularity Storage)";
+            // Draw title from config
+            string title = Config.Title.Text;
             Utility.drawTextWithShadow(b, title, Game1.dialogueFont, 
-                new Vector2(this.xPositionOnScreen + (this.width - Game1.dialogueFont.MeasureString(title).X) / 2, this.yPositionOnScreen + 40), 
+                new Vector2(this.xPositionOnScreen + (this.width - Game1.dialogueFont.MeasureString(title).X) / 2, this.yPositionOnScreen + Config.Title.OffsetY), 
                 Game1.textColor);
 
-            // Draw header background - y+80, h=64
+            // Draw header background from config
             IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(384, 373, 18, 18),
-                this.xPositionOnScreen + 16, this.yPositionOnScreen + 80, this.width - 32, 64, Color.White, 4f, false);
+                this.xPositionOnScreen + Config.Header.Padding, 
+                this.yPositionOnScreen + Config.Header.OffsetY, 
+                this.width - (Config.Header.Padding * 2), 
+                Config.Header.Height, 
+                Color.White, 4f, false);
 
             // Draw widgets
             this.SearchBar?.Draw(b);
-            // Draw "Search..." placeholder if empty
+            // Draw placeholder from config
             if (this.SearchBar != null && string.IsNullOrEmpty(this.SearchBar.Text) && !this.SearchBar.Selected)
             {
-                 b.DrawString(Game1.smallFont, "Search...", new Vector2(this.SearchBar.X + 10, this.SearchBar.Y + 8), Color.Gray);
+                 b.DrawString(Game1.smallFont, Config.SearchBar.Placeholder, new Vector2(this.SearchBar.X + 10, this.SearchBar.Y + 8), Color.Gray);
             }
 
             this.PrevPageButton?.draw(b);
@@ -323,9 +406,13 @@ namespace SingularityStorage.UI
             // Draw storage inventory
             this.StorageInventory.draw(b);
 
-            // Draw separator - Position: y = PlayerInventory.y - 32, width = menuWidth - 32, height = 16
+            // Draw separator from config
             IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(384, 373, 18, 18),
-                this.xPositionOnScreen + 16, this.PlayerInventory.yPositionOnScreen - 32, this.width - 32, 16, Color.White, 4f, false);
+                this.xPositionOnScreen + Config.Header.Padding, 
+                this.PlayerInventory.yPositionOnScreen - Config.Separator.OffsetFromInventory, 
+                this.width - (Config.Header.Padding * 2), 
+                Config.Separator.Height, 
+                Color.White, 4f, false);
 
             // Draw player inventory
             this.PlayerInventory.draw(b);
@@ -345,11 +432,11 @@ namespace SingularityStorage.UI
                 IClickableMenu.drawToolTip(b, this.HoverItem.getDescription(), this.HoverItem.DisplayName, this.HoverItem);
             }
 
-            // Draw loading text
+            // Draw loading text from config
             if (this.IsLoading)
             {
-                Utility.drawTextWithShadow(b, "加载中...", Game1.smallFont,
-                    new Vector2(this.StorageInventory.xPositionOnScreen, this.StorageInventory.yPositionOnScreen + 100), Color.Yellow);
+                Utility.drawTextWithShadow(b, Config.LoadingText.Text, Game1.smallFont,
+                    new Vector2(this.StorageInventory.xPositionOnScreen, this.StorageInventory.yPositionOnScreen + Config.LoadingText.OffsetY), Color.Yellow);
             }
 
             // Draw cursor
@@ -360,12 +447,9 @@ namespace SingularityStorage.UI
         {
             base.gameWindowSizeChanged(oldBounds, newBounds);
             
-            // Recalculate positions
-            int menuWidth = 950;
-            int menuHeight = 750;
-            
-            this.xPositionOnScreen = (Game1.uiViewport.Width - menuWidth) / 2;
-            this.yPositionOnScreen = (Game1.uiViewport.Height - menuHeight) / 2;
+            // Recalculate positions from config
+            this.xPositionOnScreen = (Game1.uiViewport.Width - Config.MenuDimensions.Width) / 2;
+            this.yPositionOnScreen = (Game1.uiViewport.Height - Config.MenuDimensions.Height) / 2;
             
             this.InitializeWidgets();
         }

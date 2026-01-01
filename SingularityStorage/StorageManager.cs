@@ -93,6 +93,29 @@ namespace SingularityStorage
         }
 
         /// <summary>
+        /// Removes an item from the storage.
+        /// </summary>
+        public static void RemoveItem(string guid, Item item)
+        {
+            if (item == null) return;
+            
+            var data = GetInventory(guid);
+            string key = item.QualifiedItemId;
+
+            if (!data.Inventory.ContainsKey(key))
+                return;
+
+            List<Item> stackList = data.Inventory[key];
+            stackList.Remove(item);
+
+            // Clean up empty lists
+            if (stackList.Count == 0)
+            {
+                data.Inventory.Remove(key);
+            }
+        }
+
+        /// <summary>
         /// Saves all loaded inventories to disk. Should be called on GameLoop.Saving.
         /// </summary>
         public static void SaveAll()
