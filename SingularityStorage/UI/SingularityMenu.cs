@@ -40,20 +40,19 @@ namespace SingularityStorage.UI
         {
             this.SourceGuid = guid;
 
-            // Calculate menu dimensions - increased height to fit everything
-            int menuWidth = 800;
-            int menuHeight = 720; // Increased from 600
+            // Calculate menu dimensions - updated based on wireframe
+            int menuWidth = 950;
+            int menuHeight = 750;
             
             this.xPositionOnScreen = (Game1.uiViewport.Width - menuWidth) / 2;
             this.yPositionOnScreen = (Game1.uiViewport.Height - menuHeight) / 2;
             this.width = menuWidth;
             this.height = menuHeight;
 
-            // Initialize Storage Inventory (9 columns, 3 rows)
-            // InventoryMenu constructor: (x, y, playerInventory, actualInventory, highlightMethod, capacity, rows, xOffset, yOffset, drawSlots)
+            // Initialize Storage Inventory (9 columns, 3 rows) - Position: x+32, y+180
             this.StorageInventory = new InventoryMenu(
                 this.xPositionOnScreen + 32,
-                this.yPositionOnScreen + 180, // Moved down to give more space to header
+                this.yPositionOnScreen + 180,
                 false,
                 new List<Item>(),
                 null,
@@ -64,10 +63,11 @@ namespace SingularityStorage.UI
                 true
             );
 
-            // Initialize Player Inventory - positioned with enough space from storage
+            // Initialize Player Inventory - Position: x+32, y + height - 220
+            // Standard Player Inventory is 12 columns by 3 rows
             this.PlayerInventory = new InventoryMenu(
                 this.xPositionOnScreen + 32,
-                this.yPositionOnScreen + this.height - 220, // More space at bottom
+                this.yPositionOnScreen + this.height - 220,
                 true
             );
 
@@ -89,9 +89,9 @@ namespace SingularityStorage.UI
 
         private void InitializeWidgets()
         {
-            int headerY = this.yPositionOnScreen + 100; // More space from top
+            int headerY = this.yPositionOnScreen + 100;
 
-            // Search Bar
+            // Search Bar (x+200, headerY, w=400, h=36)
             this.SearchBar = new TextBox(
                 Game1.content.Load<Texture2D>("LooseSprites\\textBox"), 
                 null, 
@@ -99,26 +99,27 @@ namespace SingularityStorage.UI
                 Game1.textColor)
             {
                 X = this.xPositionOnScreen + 200,
-                Y = headerY + 20,
-                Width = 400
+                Y = headerY, // Matches wireframe headerY + 0
+                Width = 400,
+                Height = 36 // Explicitly setting height target though TextBox might enforce texture height
             };
 
-            // Page Buttons
+            // Page Buttons (Prev: x+42, Next: x+106)
             this.PrevPageButton = new ClickableTextureComponent(
-                new Rectangle(this.xPositionOnScreen + 32, headerY + 16, 48, 44),
+                new Rectangle(this.xPositionOnScreen + 42, headerY, 48, 44),
                 Game1.mouseCursors,
                 new Rectangle(352, 495, 12, 11),
                 4f);
 
             this.NextPageButton = new ClickableTextureComponent(
-                new Rectangle(this.xPositionOnScreen + 96, headerY + 16, 48, 44),
+                new Rectangle(this.xPositionOnScreen + 106, headerY, 48, 44),
                 Game1.mouseCursors,
                 new Rectangle(365, 495, 12, 11),
                 4f);
 
-            // OK Button - properly positioned in bottom right
+            // OK Button - x + width - 80, y + height - 80
             this.OkButton = new ClickableTextureComponent(
-                new Rectangle(this.xPositionOnScreen + this.width - 100, this.yPositionOnScreen + this.height - 96, 64, 64),
+                new Rectangle(this.xPositionOnScreen + this.width - 80, this.yPositionOnScreen + this.height - 80, 64, 64),
                 Game1.mouseCursors,
                 Game1.getSourceRectForStandardTileSheet(Game1.mouseCursors, 46),
                 1f);
@@ -286,17 +287,24 @@ namespace SingularityStorage.UI
             Game1.drawDialogueBox(this.xPositionOnScreen, this.yPositionOnScreen, this.width, this.height, false, true);
 
             // Draw title
+            // Draw title - yPositionOnScreen + 40
             string title = "奇点存储 (Singularity Storage)";
             Utility.drawTextWithShadow(b, title, Game1.dialogueFont, 
-                new Vector2(this.xPositionOnScreen + (this.width - Game1.dialogueFont.MeasureString(title).X) / 2, this.yPositionOnScreen + 16), 
+                new Vector2(this.xPositionOnScreen + (this.width - Game1.dialogueFont.MeasureString(title).X) / 2, this.yPositionOnScreen + 40), 
                 Game1.textColor);
 
-            // Draw header background
+            // Draw header background - y+80, h=64
             IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(384, 373, 18, 18),
                 this.xPositionOnScreen + 16, this.yPositionOnScreen + 80, this.width - 32, 64, Color.White, 4f, false);
 
             // Draw widgets
             this.SearchBar?.Draw(b);
+            // Draw "Search..." placeholder if empty
+            if (this.SearchBar != null && string.IsNullOrEmpty(this.SearchBar.Text) && !this.SearchBar.Selected)
+            {
+                 b.DrawString(Game1.smallFont, "Search...", new Vector2(this.SearchBar.X + 10, this.SearchBar.Y + 8), Color.Gray);
+            }
+
             this.PrevPageButton?.draw(b);
             this.NextPageButton?.draw(b);
 
@@ -315,7 +323,7 @@ namespace SingularityStorage.UI
             // Draw storage inventory
             this.StorageInventory.draw(b);
 
-            // Draw separator
+            // Draw separator - Position: y = PlayerInventory.y - 32, width = menuWidth - 32, height = 16
             IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(384, 373, 18, 18),
                 this.xPositionOnScreen + 16, this.PlayerInventory.yPositionOnScreen - 32, this.width - 32, 16, Color.White, 4f, false);
 
@@ -353,8 +361,8 @@ namespace SingularityStorage.UI
             base.gameWindowSizeChanged(oldBounds, newBounds);
             
             // Recalculate positions
-            int menuWidth = 800;
-            int menuHeight = 720; // Match constructor
+            int menuWidth = 950;
+            int menuHeight = 750;
             
             this.xPositionOnScreen = (Game1.uiViewport.Width - menuWidth) / 2;
             this.yPositionOnScreen = (Game1.uiViewport.Height - menuHeight) / 2;
