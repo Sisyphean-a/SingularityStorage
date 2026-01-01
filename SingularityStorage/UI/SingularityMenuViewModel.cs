@@ -59,8 +59,18 @@ namespace SingularityStorage.UI
         public bool IsLoading
         {
             get => _isLoading;
-            set => SetField(ref _isLoading, value);
+            set
+            {
+                if (SetField(ref _isLoading, value))
+                    OnPropertyChanged(nameof(IsLoadingVisibility));
+            }
         }
+
+        // StardewUI uses "visible", "hidden", or "collapsed" for visibility
+        public string IsLoadingVisibility => IsLoading ? "visible" : "hidden";
+
+        // Display item count
+        public string ItemCountText => $"物品数量: {FilteredInventory.Count()} / {FullInventory.Count}";
 
         public SingularityMenuViewModel(string sourceGuid)
         {
@@ -74,6 +84,7 @@ namespace SingularityStorage.UI
             {
                 var data = StorageManager.GetInventory(this.SourceGuid);
                 this.FullInventory = data.Inventory.Values.SelectMany(x => x).ToList();
+                ModEntry.Instance?.Monitor.Log($"Loaded {FullInventory.Count} items from storage", LogLevel.Debug);
                 UpdateFilter();
             }
             else
@@ -107,6 +118,10 @@ namespace SingularityStorage.UI
             }
 
             FilteredInventory = result.Select(i => new InventoryItemViewModel(i)).ToList();
+            ModEntry.Instance?.Monitor.Log($"FilteredInventory count: {FilteredInventory.Count()}, SearchText: '{SearchText}'", LogLevel.Debug);
+            
+            // Notify UI that item count changed
+            OnPropertyChanged(nameof(ItemCountText));
         }
 
         public void OnItemClicked(InventoryItemViewModel item)

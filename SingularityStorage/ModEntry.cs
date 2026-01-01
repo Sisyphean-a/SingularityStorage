@@ -3,6 +3,8 @@ using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
 using HarmonyLib;
+using StardewUI;
+using StardewUI.Framework;
 
 namespace SingularityStorage
 {
@@ -14,6 +16,10 @@ namespace SingularityStorage
         *********/
         /// <summary>The singleton instance of this mod.</summary>
         public static ModEntry? Instance { get; private set; }
+
+        /// <summary>StardewUI ViewEngine for loading .sml files.</summary>
+        private IViewEngine? viewEngine;
+        public IViewEngine? ViewEngine => viewEngine;
 
         /*********
         ** Public methods
@@ -30,6 +36,7 @@ namespace SingularityStorage
             harmony.PatchAll();
 
             // Register Events
+            helper.Events.GameLoop.GameLaunched += this.OnGameLaunched;
             helper.Events.GameLoop.SaveLoaded += this.OnSaveLoaded;
             helper.Events.GameLoop.Saving += this.OnSaving;
             helper.Events.Content.AssetRequested += this.OnAssetRequested;
@@ -42,6 +49,36 @@ namespace SingularityStorage
             
             // Initialize Network
             Network.NetworkManager.Initialize(this.Helper, this.Monitor);
+        }
+
+        /*********
+        ** Private methods
+        *********/
+        
+        /// <summary>Raised after the game is launched.</summary>
+        /// <param name="sender">The event sender.</param>
+        /// <param name="e">The event data.</param>
+        private void OnGameLaunched(object? sender, GameLaunchedEventArgs e)
+        {
+            // Initialize StardewUI ViewEngine
+            try
+            {
+                viewEngine = this.Helper.ModRegistry.GetApi<IViewEngine>("focustense.StardewUI");
+                if (viewEngine != null)
+                {
+                    viewEngine.RegisterViews($"Mods/{this.ModManifest.UniqueID}/Views", "assets/views");
+                    viewEngine.EnableHotReloading();
+                    this.Monitor.Log("StardewUI ViewEngine initialized successfully.", LogLevel.Info);
+                }
+                else
+                {
+                    this.Monitor.Log("StardewUI not found. UI features will be disabled.", LogLevel.Warn);
+                }
+            }
+            catch (Exception ex)
+            {
+                this.Monitor.Log($"Failed to initialize StardewUI: {ex.Message}", LogLevel.Error);
+            }
         }
 
         /*********

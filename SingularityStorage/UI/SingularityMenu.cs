@@ -1,39 +1,64 @@
 using System;
-using System.Collections.Generic;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using StardewModdingAPI;
 using StardewValley;
 using StardewValley.Menus;
-using StardewUI;
-using StardewUI.Widgets;
-using StardewUI.Layout;
+using StardewUI.Framework;
 using SingularityStorage.Network;
 
 namespace SingularityStorage.UI
 {
-    public class SingularityMenu : ViewMenu<SingularityMenuViewModel>
+    public class SingularityMenu : IClickableMenu
     {
-        public SingularityMenu(string sourceGuid) 
-            : base(new SingularityMenuViewModel(sourceGuid))
+        private readonly SingularityMenuViewModel viewModel;
+        private readonly IClickableMenu? innerMenu;
+
+        public SingularityMenu(string sourceGuid)
         {
+            this.viewModel = new SingularityMenuViewModel(sourceGuid);
+            
+            // Use ViewEngine to create the menu from asset
+            var viewEngine = ModEntry.Instance?.ViewEngine;
+            if (viewEngine != null)
+            {
+                var assetName = $"Mods/{ModEntry.Instance.ModManifest.UniqueID}/Views/SingularityMenu";
+                this.innerMenu = viewEngine.CreateMenuFromAsset(assetName, this.viewModel);
+            }
+            else
+            {
+                ModEntry.Instance?.Monitor.Log("ViewEngine not available, cannot create menu.", LogLevel.Error);
+            }
         }
 
-        protected override IView CreateView(SingularityMenuViewModel viewModel)
+        public override void draw(SpriteBatch b)
         {
-            // Load StarML from assets
-            var assetName = "assets/views/SingularityMenu.sml";
-            var sml = ModEntry.Instance.Helper.ModContent.Load<string>(assetName);
-            return View.FromString(sml);
+            this.innerMenu?.draw(b);
         }
 
-        public override void Update(GameTime time)
+        public override void update(GameTime time)
         {
-            base.Update(time);
+            this.innerMenu?.update(time);
+        }
+
+        public override void receiveLeftClick(int x, int y, bool playSound = true)
+        {
+            this.innerMenu?.receiveLeftClick(x, y, playSound);
+        }
+
+        public override void receiveRightClick(int x, int y, bool playSound = true)
+        {
+            this.innerMenu?.receiveRightClick(x, y, playSound);
+        }
+
+        public override void performHoverAction(int x, int y)
+        {
+            this.innerMenu?.performHoverAction(x, y);
         }
 
         public void UpdateFromNetwork(NetworkPacket packet)
         {
-            this.Context.UpdateFromNetwork(packet);
+            this.viewModel.UpdateFromNetwork(packet);
         }
     }
 }
