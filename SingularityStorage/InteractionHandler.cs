@@ -42,10 +42,52 @@ namespace SingularityStorage
                 {
                     // Suppress default action (which might be just playing a sound or shaking)
                     this.Helper.Input.Suppress(e.Button);
+
+                    // Check for upgrade item
+                    if (this.HandleUpgrade(obj, Game1.player.CurrentItem))
+                    {
+                        return;
+                    }
                     
                     this.OpenStorage(obj);
                 }
             }
+        }
+
+        private bool HandleUpgrade(StardewValley.Object chest, Item? item)
+        {
+            if (item == null) return false;
+            
+            // Define upgrade amounts
+            int increment = 0;
+            if (item.ItemId == "Singularity.Storage_T1_Comp") increment = 36;
+            else if (item.ItemId == "Singularity.Storage_T2_Comp") increment = 100;
+            else if (item.ItemId == "Singularity.Storage_T3_Comp") increment = 999;
+            
+            if (increment > 0)
+            {
+                // Ensure GUID exists
+                if (!chest.modData.ContainsKey("SingularityData_GUID"))
+                {
+                    chest.modData["SingularityData_GUID"] = Guid.NewGuid().ToString();
+                }
+
+                string guid = chest.modData["SingularityData_GUID"];
+                
+                // Perform upgrade
+                StorageManager.UpgradeCapacity(guid, increment);
+                
+                // Consume item
+                Game1.player.reduceActiveItemByOne();
+                
+                // Feedback
+                Game1.playSound("bubbles");
+                Game1.addHUDMessage(new HUDMessage($"Storage Upgraded! +{increment} Capacity", 2));
+                
+                return true;
+            }
+            
+            return false;
         }
 
         private void OpenStorage(StardewValley.Object chestObj)

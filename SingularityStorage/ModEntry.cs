@@ -58,6 +58,19 @@ namespace SingularityStorage
             {
                 e.LoadFromModFile<Microsoft.Xna.Framework.Graphics.Texture2D>("assets/SingularityChest.png", AssetLoadPriority.Medium);
             }
+            // Load individual upgrade textures
+            if (e.Name.IsEquivalentTo($"Mods/{this.ModManifest.UniqueID}/Upgrade_T1"))
+            {
+                e.LoadFromModFile<Microsoft.Xna.Framework.Graphics.Texture2D>("assets/SilverProcessor.png", AssetLoadPriority.Medium);
+            }
+            if (e.Name.IsEquivalentTo($"Mods/{this.ModManifest.UniqueID}/Upgrade_T2"))
+            {
+                e.LoadFromModFile<Microsoft.Xna.Framework.Graphics.Texture2D>("assets/GoldCircuit.png", AssetLoadPriority.Medium);
+            }
+            if (e.Name.IsEquivalentTo($"Mods/{this.ModManifest.UniqueID}/Upgrade_T3"))
+            {
+                e.LoadFromModFile<Microsoft.Xna.Framework.Graphics.Texture2D>("assets/VoidRune.png", AssetLoadPriority.Medium);
+            }
 
             // 2. Add the BigCraftable data
             if (e.Name.IsEquivalentTo("Data/BigCraftables"))
@@ -67,17 +80,61 @@ namespace SingularityStorage
                     var data = editor.AsDictionary<string, StardewValley.GameData.BigCraftables.BigCraftableData>().Data;
                     var itemData = new StardewValley.GameData.BigCraftables.BigCraftableData
                     {
-                        Name = "SingularityChest", // Internal name must be stable/English
-                        DisplayName = this.Helper.Translation.Get("chest.name"), // Localized name
+                        Name = "SingularityChest", 
+                        DisplayName = "Singularity Chest", 
                         Price = 1000,
-                        Description = this.Helper.Translation.Get("chest.description"),
+                        Description = "A chest with virtualized storage.",
                         Texture = $"Mods/{this.ModManifest.UniqueID}/SingularityChest",
                         SpriteIndex = 0,
                         Fragility = 0,
-                        CanBePlacedOutdoors = true,
-                        IsLamp = false
+                        CanBePlacedOutdoors = true
                     };
-                    data[$"{this.ModManifest.UniqueID}_SingularityChest"] = itemData;
+                    data["Singularity.Storage_SingularityChest"] = itemData;
+                });
+            }
+            
+            // 2.1 Add the Item data
+            if (e.Name.IsEquivalentTo("Data/Objects"))
+            {
+                e.Edit(editor =>
+                {
+                    var data = editor.AsDictionary<string, StardewValley.GameData.Objects.ObjectData>().Data;
+                    
+                    data["Singularity.Storage_T1_Comp"] = new StardewValley.GameData.Objects.ObjectData
+                    {
+                        Name = "Singularity.Storage_T1_Comp",
+                        DisplayName = "Basic Storage Upgrade",
+                        Description = "Adds 36 slots to a Singularity Chest.",
+                        Type = "Basic",
+                        Category = -16,
+                        Price = 1000,
+                        Texture = $"Mods/{this.ModManifest.UniqueID}/Upgrade_T1",
+                        SpriteIndex = 0
+                    };
+                    
+                    data["Singularity.Storage_T2_Comp"] = new StardewValley.GameData.Objects.ObjectData
+                    {
+                        Name = "Singularity.Storage_T2_Comp",
+                        DisplayName = "Advanced Storage Upgrade",
+                        Description = "Adds 100 slots to a Singularity Chest.",
+                        Type = "Basic",
+                        Category = -16,
+                        Price = 5000,
+                        Texture = $"Mods/{this.ModManifest.UniqueID}/Upgrade_T2",
+                        SpriteIndex = 0
+                    };
+                    
+                    data["Singularity.Storage_T3_Comp"] = new StardewValley.GameData.Objects.ObjectData
+                    {
+                        Name = "Singularity.Storage_T3_Comp",
+                        DisplayName = "Quantum Storage Upgrade",
+                        Description = "Adds 999 slots to a Singularity Chest.",
+                        Type = "Basic",
+                        Category = -16,
+                        Price = 20000,
+                        Texture = $"Mods/{this.ModManifest.UniqueID}/Upgrade_T3",
+                        SpriteIndex = 0
+                    };
                 });
             }
 
@@ -89,9 +146,10 @@ namespace SingularityStorage
                     var data = editor.AsDictionary<string, string>().Data;
                     // Format: materials / output quantity / output id / type / skill unlock
                     // Iridium Bar (337) x10, Gold Bar (336) x5, Battery Pack (787) x1
-                    string itemId = $"{this.ModManifest.UniqueID}_SingularityChest";
-                    // Using "true" for BigCraftable
-                    data["Singularity Chest"] = $"337 1 336 5 787 1/Home/{itemId}/true/default"; 
+                    data["Singularity Chest"] = "337 1 336 5 787 1/Home/Singularity.Storage_SingularityChest/true/default"; 
+                    data["Basic Storage Upgrade"] = "338 5 335 5/Home/Singularity.Storage_T1_Comp/false/default";
+                    data["Advanced Storage Upgrade"] = "337 2 787 1/Home/Singularity.Storage_T2_Comp/false/default";
+                    data["Quantum Storage Upgrade"] = "910 1 787 5/Home/Singularity.Storage_T3_Comp/false/default";
                 });
             }
         }

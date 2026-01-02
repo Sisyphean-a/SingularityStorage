@@ -1,0 +1,62 @@
+{
+  "MenuDimensions": {
+    "Width": 1100,
+    "Height": 920
+  },
+  "Title": {
+    "Text": "奇点存储 (Singularity Storage)",
+    "OffsetY": 50
+  },
+  "Header": {
+    "OffsetY": 100,
+    "Height": 64,
+    "Padding": 24
+  },
+  "SearchBar": {
+    "OffsetX": 240,
+    "Width": 450,
+    "Height": 36,
+    "Placeholder": "Search..."
+  },
+  "PageButtons": {
+    "PrevOffsetX": 50,
+    "NextOffsetX": 120,
+    "Width": 48,
+    "Height": 44
+  },
+  "StorageInventory": {
+    "OffsetX": 60,
+    "OffsetY": 200,
+    "Columns": 14,
+    "Rows": 5,
+    "SlotSpacing": 4
+  },
+  "PlayerInventory": {
+    "OffsetX": 60,
+    "OffsetFromBottom": 240
+  },
+  "Separator": {
+    "OffsetFromInventory": 40,
+    "Height": 16
+  },
+  "FillStacksButton": {
+    "OffsetFromRight": 80,
+    "OffsetFromBottom": 696,
+    "Size": 48,
+    "TextureSource": {
+      "X": 103,
+      "Y": 469,
+      "Width": 16,
+      "Height": 16
+    }
+  },
+  "OkButton": {
+    "OffsetFromRight": 100,
+    "OffsetFromBottom": 100,
+    "Size": 64
+  },
+  "LoadingText": {
+    "Text": "加载中...",
+    "OffsetY": 120
+  }
+}

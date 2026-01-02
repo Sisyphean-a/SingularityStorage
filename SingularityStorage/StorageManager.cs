@@ -49,9 +49,10 @@ namespace SingularityStorage
         /// <summary>
         /// Adds an item to the storage.
         /// </summary>
-        public static void AddItem(string guid, Item item)
+        /// <returns>True if the item was fully or partially added; false if rejected due to capacity.</returns>
+        public static bool AddItem(string guid, Item item)
         {
-            if (item == null) return;
+            if (item == null || item.Stack <= 0) return false;
             
             var data = GetInventory(guid);
             string key = item.QualifiedItemId;
@@ -61,12 +62,10 @@ namespace SingularityStorage
                 data.Inventory[key] = new List<Item>();
             }
 
-            // Simple stack logic: try to merge with existing stacks
-            // For now, we just add it. Advanced stacking logic comes later.
-            // Actually, we should try to stack it to save RAM/Disk space.
             List<Item> stackList = data.Inventory[key];
             bool added = false;
 
+            // 1. Try to merge with existing stacks (doesn't increase slot usage)
             foreach (Item existing in stackList)
             {
                 if (existing.canStackWith(item))
@@ -77,18 +76,81 @@ namespace SingularityStorage
                         int toAdd = Math.Min(available, item.Stack);
                         existing.Stack += toAdd;
                         item.Stack -= toAdd;
+                        added = true;
                         if (item.Stack <= 0)
                         {
-                            added = true;
                             break;
                         }
                     }
                 }
             }
 
-            if (!added && item.Stack > 0)
+            // 2. If we still have items to add, we need a new slot.
+            if (item.Stack > 0)
             {
-                stackList.Add(item);
+                // Check Capacity
+                int currentUsedSlots = data.Inventory.Values.Sum(list => list.Count);
+                if (currentUsedSlots >= data.MaxCapacity)
+                {
+                    Monitor?.Log($"Add Item Rejected: Storage Full ({currentUsedSlots}/{data.MaxCapacity})", LogLevel.Warn);
+                    return added;
+                }
+
+                Monitor?.Log($"Adding new stack: {item.Name} x{item.Stack}", LogLevel.Trace);
+                
+                // Copy the item to storage
+                Item storedItem = item.getOne();
+                storedItem.Stack = item.Stack;
+                stackList.Add(storedItem);
+                
+                // Mark input item as fully consumed
+                item.Stack = 0;
+                added = true;
+            }
+            
+            return added;
+        }
+
+        /// <summary>
+        /// Manually upgrades the capacity of the storage.
+        /// </summary>
+        public static void UpgradeCapacity(string guid, int increment)
+        {
+            var data = GetInventory(guid);
+            data.MaxCapacity += increment;
+            Monitor?.Log($"Upgraded storage {guid} capacity to {data.MaxCapacity} (+{increment})", LogLevel.Info);
+        }
+
+        /// <summary>
+        /// Returns (UsedSlots, MaxCapacity)
+        /// </summary>
+        public static (int Used, int Max) GetCounts(string guid)
+        {
+            var data = GetInventory(guid);
+            int used = data.Inventory.Values.Sum(list => list.Count);
+            return (used, data.MaxCapacity);
+        }
+
+        /// <summary>
+        /// Removes an item from the storage.
+        /// </summary>
+        public static void RemoveItem(string guid, Item item)
+        {
+            if (item == null) return;
+            
+            var data = GetInventory(guid);
+            string key = item.QualifiedItemId;
+
+            if (!data.Inventory.ContainsKey(key))
+                return;
+
+            List<Item> stackList = data.Inventory[key];
+            stackList.Remove(item);
+
+            // Clean up empty lists
+            if (stackList.Count == 0)
+            {
+                data.Inventory.Remove(key);
             }
         }
 
