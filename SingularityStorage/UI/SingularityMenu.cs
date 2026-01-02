@@ -39,8 +39,14 @@ namespace SingularityStorage.UI
 
         // Categories
         private List<ClickableComponent> CategoryTabs = new List<ClickableComponent>();
-        private string CurrentCategory = "All";
-        private readonly List<string> Categories = new List<string> { "All", "Weapons", "Tools", "Resources", "Misc" };
+        private List<ClickableComponent> SubCategoryTabs = new List<ClickableComponent>();
+        private string SelectedGroup = "全部";
+        private int? SelectedSubCategory = null; // null means 'All' in sub-category
+        
+        private readonly List<string> Groups = Data.CategoryData.Tabs;
+        private const int TabWidth = 110; // Wider tabs as requested
+        private const int TabHeight = 64; 
+        
         private string CachedCapacityText = "";
 
         // UI Components
@@ -190,16 +196,55 @@ namespace SingularityStorage.UI
                 Game1.getSourceRectForStandardTileSheet(Game1.mouseCursors, 46),
                 1f);
 
-            // Initialize Category Tabs
+            // Initialize Category Tabs (Major Groups)
             this.CategoryTabs.Clear();
-            int tabX = this.xPositionOnScreen - 64; // Left of menu
+            // Major tabs are on the far left (Column 1)
+            // Column 2 will be between Major tabs and the menu window
+            // So Major tabs X = xPosition - (TabWidth * 2)
+            // Sub tabs X = xPosition - TabWidth
+            
+            int majorTabX = this.xPositionOnScreen - (TabWidth * 2) - 8; // Extra padding
             int tabY = this.yPositionOnScreen + 64;
             
-            for (int i = 0; i < this.Categories.Count; i++)
+            for (int i = 0; i < this.Groups.Count; i++)
             {
                 this.CategoryTabs.Add(new ClickableComponent(
-                    new Rectangle(tabX, tabY + (i * 64), 64, 64), 
-                    this.Categories[i]));
+                    new Rectangle(majorTabX, tabY + (i * TabHeight), TabWidth, TabHeight), 
+                    this.Groups[i]));
+            }
+            
+            // Initialize Sub Tabs (Column 2) based on current selection
+            this.UpdateSubCategories();
+        }
+
+        private void UpdateSubCategories()
+        {
+            this.SubCategoryTabs.Clear();
+            int subTabX = this.xPositionOnScreen - TabWidth;
+            int tabY = this.yPositionOnScreen + 64;
+            
+            // Always add "All" (全部) option for sub-category
+            this.SubCategoryTabs.Add(new ClickableComponent(
+                new Rectangle(subTabX, tabY, TabWidth, TabHeight), 
+                "全部") 
+            { 
+                myID = -9999 // Special ID for 'All'
+            });
+            
+            if (Data.CategoryData.CategoryGroups.TryGetValue(this.SelectedGroup, out var subCats))
+            {
+                 for (int i = 0; i < subCats.Count; i++)
+                 {
+                     int catId = subCats[i];
+                     string name = Data.CategoryData.GetCategoryName(catId);
+                     
+                     this.SubCategoryTabs.Add(new ClickableComponent(
+                        new Rectangle(subTabX, tabY + ((i + 1) * TabHeight), TabWidth, TabHeight), 
+                        name)
+                     {
+                         myID = catId
+                     });
+                 }
             }
         }
 
@@ -264,13 +309,19 @@ namespace SingularityStorage.UI
             {
                 IEnumerable<Item?> items = this.FullInventory;
 
-                // 1. Filter by Category
-                if (this.CurrentCategory != "All")
+                // 1. Filter by Category Group
+                if (this.SelectedGroup != "全部")
                 {
-                    items = items.Where(item => IsItemInCategory(item, this.CurrentCategory));
+                    items = items.Where(item => Data.CategoryData.IsItemInGroup(item, this.SelectedGroup));
+                    
+                    // 2. Filter by SubCategory
+                    if (this.SelectedSubCategory.HasValue && this.SelectedSubCategory.Value != -9999)
+                    {
+                        items = items.Where(item => item != null && item.Category == this.SelectedSubCategory.Value);
+                    }
                 }
 
-                // 2. Filter by Search
+                // 3. Filter by Search
                 if (!string.IsNullOrEmpty(query))
                 {
                     items = items.Where(item => item != null && item.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
@@ -282,30 +333,7 @@ namespace SingularityStorage.UI
             this.RefreshView();
         }
 
-        private bool IsItemInCategory(Item? item, string category)
-        {
-            if (item == null) return false;
-            switch (category)
-            {
-                case "Weapons":
-                    return item.Category == StardewValley.Object.weaponCategory;
-                case "Tools":
-                    return item is Tool && item.Category != StardewValley.Object.weaponCategory;
-                case "Resources":
-                    return item.Category == StardewValley.Object.GemCategory || 
-                           item.Category == StardewValley.Object.mineralsCategory ||
-                           item.Category == StardewValley.Object.metalResources ||
-                           item.Category == StardewValley.Object.buildingResources ||
-                           item.Category == StardewValley.Object.CraftingCategory ||
-                           item.Category == StardewValley.Object.fertilizerCategory;
-                case "Misc":
-                     return !IsItemInCategory(item, "Weapons") && 
-                            !IsItemInCategory(item, "Tools") && 
-                            !IsItemInCategory(item, "Resources");
-                default:
-                    return true;
-            }
-        }
+
         
         private void FillExistingStacks()
         {
@@ -406,18 +434,46 @@ namespace SingularityStorage.UI
                 return;
             }
 
-            // Handle Category Tabs
+
+            
+
+            // Handle Category Tabs (Major)
             foreach (var tab in this.CategoryTabs)
             {
                 if (tab.containsPoint(x, y))
                 {
-                    if (this.CurrentCategory != tab.name)
+                    if (this.SelectedGroup != tab.name)
                     {
-                        this.CurrentCategory = tab.name;
-                        this.ApplyFilters(); // ApplyFilters resets page to 0
+                        this.SelectedGroup = tab.name;
+                        this.SelectedSubCategory = null; 
+                        this.UpdateSubCategories();
+                        this.ApplyFilters(); 
                         Game1.playSound("smallSelect");
                     }
                     return;
+                }
+            }
+
+            // Handle SubCategory Tabs
+            if (this.SelectedGroup != "全部")
+            {
+                foreach (var tab in this.SubCategoryTabs)
+                {
+                    if (tab.containsPoint(x, y))
+                    {
+                        int newSub = tab.myID;
+                        int resolvedCurrent = this.SelectedSubCategory ?? -9999;
+                        
+                        if (resolvedCurrent != newSub)
+                        {
+                            if (newSub == -9999) this.SelectedSubCategory = null;
+                            else this.SelectedSubCategory = newSub;
+                            
+                            this.ApplyFilters();
+                            Game1.playSound("smallSelect");
+                        }
+                        return;
+                    }
                 }
             }
             
@@ -522,7 +578,14 @@ namespace SingularityStorage.UI
                         
                         // 1. Filter by Category
                         IEnumerable<Item?> items = this.FullInventory;
-                        if (this.CurrentCategory != "All") items = items.Where(item => IsItemInCategory(item, this.CurrentCategory));
+                        if (this.SelectedGroup != "全部")
+                        {
+                             items = items.Where(item => Data.CategoryData.IsItemInGroup(item, this.SelectedGroup));
+                             if (this.SelectedSubCategory.HasValue && this.SelectedSubCategory.Value != -9999)
+                             {
+                                 items = items.Where(item => item != null && item.Category == this.SelectedSubCategory.Value);
+                             }
+                        }
                         string query = this.SearchBar?.Text?.Trim() ?? "";
                         if (!string.IsNullOrEmpty(query)) items = items.Where(item => item != null && item.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
                         this.FilteredInventory = items.ToList();
@@ -742,6 +805,39 @@ namespace SingularityStorage.UI
             // Draw fade overlay
             b.Draw(Game1.fadeToBlackRect, new Rectangle(0, 0, Game1.uiViewport.Width, Game1.uiViewport.Height), Color.Black * 0.5f);
 
+            // Draw Major Tabs
+            foreach (var tab in this.CategoryTabs)
+            {
+                 bool selected = (tab.name == this.SelectedGroup);
+                 IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(16, 368, 16, 16), 
+                     tab.bounds.X, tab.bounds.Y, tab.bounds.Width, tab.bounds.Height, 
+                     selected ? Color.White : Color.Gray, 4f, false); // Gray out unselected? Or keep white.
+                 
+                 Vector2 textSize = Game1.smallFont.MeasureString(tab.name);
+                 Vector2 textPos = new Vector2(
+                    tab.bounds.X + (tab.bounds.Width - textSize.X) / 2, 
+                    tab.bounds.Y + (tab.bounds.Height - textSize.Y) / 2 + 4);
+                 b.DrawString(Game1.smallFont, tab.name, textPos, Game1.textColor);
+            }
+            
+            // Draw Sub Tabs
+            if (this.SelectedGroup != "全部")
+            {
+                foreach (var tab in this.SubCategoryTabs)
+                {
+                     bool selected = (this.SelectedSubCategory == null && tab.myID == -9999) || (this.SelectedSubCategory == tab.myID);
+                     IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(16, 368, 16, 16), 
+                         tab.bounds.X, tab.bounds.Y, tab.bounds.Width, tab.bounds.Height, 
+                         selected ? Color.White : Color.Gray * 0.9f, 4f, false);
+                         
+                     Vector2 textSize = Game1.smallFont.MeasureString(tab.name);
+                     Vector2 textPos = new Vector2(
+                        tab.bounds.X + (tab.bounds.Width - textSize.X) / 2, 
+                        tab.bounds.Y + (tab.bounds.Height - textSize.Y) / 2 + 4);
+                     b.DrawString(Game1.smallFont, tab.name, textPos, Game1.textColor);
+                }
+            }
+
             // Draw main menu background
             Game1.drawDialogueBox(this.xPositionOnScreen, this.yPositionOnScreen, this.width, this.height, false, true);
 
@@ -827,23 +923,7 @@ namespace SingularityStorage.UI
                 }
             }
 
-            // Draw Category Tabs
-            foreach (var tab in this.CategoryTabs)
-            {
-                // Draw background
-                IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(384, 373, 18, 18), 
-                    tab.bounds.X, tab.bounds.Y, tab.bounds.Width, tab.bounds.Height, 
-                    this.CurrentCategory == tab.name ? Color.White : Color.Gray, 4f, false);
-                
-                // Draw Text (First 3 chars)
-                string label = tab.name.Length > 3 ? tab.name.Substring(0, 3) : tab.name;
-                if (tab.name == "All") label = "ALL";
-                
-                Vector2 labelSize = Game1.smallFont.MeasureString(label);
-                Utility.drawTextWithShadow(b, label, Game1.smallFont, 
-                    new Vector2(tab.bounds.X + (tab.bounds.Width - labelSize.X) / 2, tab.bounds.Y + (tab.bounds.Height - labelSize.Y) / 2), 
-                    Game1.textColor);
-            }
+
 
             // Draw Capacity
             if (!string.IsNullOrEmpty(this.CachedCapacityText))
