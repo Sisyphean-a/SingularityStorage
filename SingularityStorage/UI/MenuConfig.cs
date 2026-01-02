@@ -18,6 +18,7 @@ namespace SingularityStorage.UI
         public PlayerInventoryConfig PlayerInventory { get; set; } = new();
         public SeparatorConfig Separator { get; set; } = new();
         public ButtonConfig OkButton { get; set; } = new();
+        public FillStacksButtonConfig? FillStacksButton { get; set; }
         public LoadingTextConfig LoadingText { get; set; } = new();
 
         /// <summary>
@@ -104,6 +105,19 @@ namespace SingularityStorage.UI
         public int OffsetFromRight { get; set; } = 80;
         public int OffsetFromBottom { get; set; } = 80;
         public int Size { get; set; } = 64;
+    }
+
+    public class FillStacksButtonConfig : ButtonConfig
+    {
+         public TextureSourceConfig? TextureSource { get; set; }
+    }
+
+    public class TextureSourceConfig
+    {
+        public int X { get; set; }
+        public int Y { get; set; }
+        public int Width { get; set; }
+        public int Height { get; set; }
     }
 
     public class LoadingTextConfig

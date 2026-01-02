@@ -18,6 +18,7 @@
         <None Include="content.json" CopyToOutputDirectory="Always" />
         <None Include="assets\**" CopyToOutputDirectory="Always" />
         <None Include="i18n\**" CopyToOutputDirectory="Always" />
+        <None Include="UI\**" CopyToOutputDirectory="Always" />
     </ItemGroup>
 
 </Project>

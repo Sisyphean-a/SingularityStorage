@@ -20,7 +20,7 @@ namespace SingularityStorage.Data
         /// The maximum number of items (not stacks) that can be stored.
         /// Defaults to 36.
         /// </summary>
-        public int MaxCapacity { get; set; } = 36;
+        public int MaxCapacity { get; set; } = 70;
 
         /// <summary>
         /// The massive inventory storage.

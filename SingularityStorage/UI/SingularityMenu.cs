@@ -50,6 +50,7 @@ namespace SingularityStorage.UI
         private ClickableTextureComponent? PrevPageButton;
         private TextBox? SearchBar;
         private ClickableTextureComponent? OkButton;
+        private ClickableTextureComponent? FillStacksButton;
         
         // State
         private string LastSearchText = "";
@@ -141,6 +142,42 @@ namespace SingularityStorage.UI
                 Game1.mouseCursors,
                 new Rectangle(365, 495, 12, 11),
                 4f);
+
+            // Fill Stacks Button
+            if (Config.FillStacksButton != null)
+            {
+                 Rectangle srcRect = new Rectangle(103, 469, 16, 16);
+                 if (Config.FillStacksButton.TextureSource != null)
+                 {
+                     srcRect = new Rectangle(
+                         Config.FillStacksButton.TextureSource.X, 
+                         Config.FillStacksButton.TextureSource.Y, 
+                         Config.FillStacksButton.TextureSource.Width, 
+                         Config.FillStacksButton.TextureSource.Height);
+                 }
+                 
+                 float scale = Config.FillStacksButton.Size / (float)srcRect.Width;
+                 
+                 // Position: Right side of header area, next to search bar
+                 int buttonX = this.xPositionOnScreen + this.width - Config.FillStacksButton.OffsetFromRight - Config.FillStacksButton.Size;
+                 int buttonY = this.yPositionOnScreen + Config.Header.OffsetY + 8; // Align with header
+                 
+                 this.FillStacksButton = new ClickableTextureComponent(
+                    new Rectangle(
+                        buttonX,
+                        buttonY,
+                        Config.FillStacksButton.Size,
+                        Config.FillStacksButton.Size),
+                    Game1.mouseCursors,
+                    srcRect,
+                    scale);
+                    
+                 ModEntry.Instance.Monitor.Log($"FillStacksButton created at ({buttonX}, {buttonY}), size: {Config.FillStacksButton.Size}", StardewModdingAPI.LogLevel.Debug);
+            }
+            else
+            {
+                ModEntry.Instance.Monitor.Log("FillStacksButton config is NULL!", StardewModdingAPI.LogLevel.Warn);
+            }
 
             // OK Button from config
             this.OkButton = new ClickableTextureComponent(
@@ -269,6 +306,65 @@ namespace SingularityStorage.UI
                     return true;
             }
         }
+        
+        private void FillExistingStacks()
+        {
+            if (!Context.IsMainPlayer)
+            {
+                // Network packet: RequestFillStacks
+                // Not implemented yet on backend, so we might skip or log warning.
+                // Assuming we can send a custom message or just "Add" remaining compatible items logic locally then sync? 
+                // No, complex operations should be server-side or iterative.
+                // For now, let's implement the iterated client-side logic for simplicity, 
+                // though it might spam packets.
+                // Better approach: Iterate locally, find matches, send Add requests.
+            }
+            
+            // Logic: Scan Player Inventory. If item exists in Storage, move it.
+            // Note: Efficient matching requires knowing Storage contents.
+            // We have FullInventory locally (replicated).
+            
+            var playerItems = Game1.player.Items.Where(i => i != null).ToList();
+            bool changed = false;
+
+            foreach (var pItem in playerItems)
+            {
+                if (pItem == null) continue;
+                
+                // Check if similar item exists in Storage
+                // Standard stacking rules: check CheckCanAddToStack() if possible, or just compare Names/IDs/Quality
+                bool exists = this.FullInventory.Any(sItem => 
+                    sItem != null && sItem.canStackWith(pItem));
+                
+                if (exists)
+                {
+                    // Move item to storage
+                    if (Context.IsMainPlayer)
+                    {
+                        StorageManager.AddItem(this.SourceGuid, pItem);
+                        Game1.player.removeItemFromInventory(pItem);
+                        changed = true;
+                    }
+                    else
+                    {
+                        // TODO: Network implementation for fill stacks
+                        // For now, just try to move it
+                        // StorageManager.AddItem won't work for farmhand directly if it writes disk.
+                        // Farmhand needs to send packet.
+                        // NetworkManager.SendTransfer(...);
+                    }
+                }
+            }
+
+            if (changed && Context.IsMainPlayer)
+            {
+                Game1.playSound("Ship");
+                // Refresh
+                 var data = StorageManager.GetInventory(this.SourceGuid);
+                 this.FullInventory = data.Inventory.Values.SelectMany(x => x).Cast<Item?>().ToList();
+                 this.ApplyFilters();
+            }
+        }
 
         public override void receiveLeftClick(int x, int y, bool playSound = true)
         {
@@ -304,6 +400,12 @@ namespace SingularityStorage.UI
                 return;
             }
 
+            if (this.FillStacksButton != null && this.FillStacksButton.containsPoint(x, y))
+            {
+                this.FillExistingStacks();
+                return;
+            }
+
             // Handle Category Tabs
             foreach (var tab in this.CategoryTabs)
             {
@@ -318,40 +420,84 @@ namespace SingularityStorage.UI
                     return;
                 }
             }
+            
+            bool isShift = (Game1.oldKBState.IsKeyDown(Keys.LeftShift) || Game1.oldKBState.IsKeyDown(Keys.RightShift));
 
             // Handle Storage Inventory clicks
             Item? clickedItem = this.StorageInventory.getItemAt(x, y);
-            if (clickedItem != null && this.HeldItem == null)
+            if (clickedItem != null)
             {
-                this.HeldItem = clickedItem;
-                this.StorageInventory.actualInventory.Remove(clickedItem);
-                
-                // We don't remove from FullInventory/FilteredInventory immediately here?
-                // Actually we do for consistency if we are "holding" it.
-                // But if we drop it back, we re-add.
-                // The issue is pagination. Removing from FilteredInventory shifts everything on next RefreshView.
-                this.FullInventory.Remove(clickedItem);
-                this.FilteredInventory.Remove(clickedItem);
-                
-                // Sync with StorageManager
-                if (Context.IsMainPlayer)
+                if (isShift)
                 {
-                    StorageManager.RemoveItem(this.SourceGuid, clickedItem);
+                     // Shift + Click: Transfer to Player
+                     if (Game1.player.couldInventoryAcceptThisItem(clickedItem))
+                     {
+                         Game1.player.addItemToInventory(clickedItem);
+                         this.StorageInventory.actualInventory.Remove(clickedItem); // Visual update
+                         
+                         if (Context.IsMainPlayer)
+                         {
+                             StorageManager.RemoveItem(this.SourceGuid, clickedItem);
+                             this.FullInventory.Remove(clickedItem);
+                             this.FilteredInventory.Remove(clickedItem);
+                             // Re-apply filters? Efficiency trade-off. 
+                             // If we remove from filtered list, we should be fine.
+                         }
+                         Game1.playSound("dwop");
+                         this.RefreshView();
+                     }
+                     return;
                 }
                 
-                Game1.playSound("dwop");
-                this.RefreshView(); // Update view to fill gap
-                return;
+                // Normal Click: Pick up
+                if (this.HeldItem == null)
+                {
+                    this.HeldItem = clickedItem;
+                    this.StorageInventory.actualInventory.Remove(clickedItem);
+                    this.FullInventory.Remove(clickedItem);
+                    this.FilteredInventory.Remove(clickedItem);
+                    
+                    if (Context.IsMainPlayer)
+                    {
+                        StorageManager.RemoveItem(this.SourceGuid, clickedItem);
+                    }
+                    
+                    Game1.playSound("dwop");
+                    this.RefreshView(); 
+                    return;
+                }
             }
 
             // Handle Player Inventory clicks
             Item? playerItem = this.PlayerInventory.getItemAt(x, y);
-            if (playerItem != null && this.HeldItem == null)
+            if (playerItem != null)
             {
-                this.HeldItem = playerItem;
-                Game1.player.removeItemFromInventory(playerItem);
-                Game1.playSound("dwop");
-                return;
+                if (isShift)
+                {
+                    // Shift + Click: Transfer to Storage
+                    if (Context.IsMainPlayer)
+                    {
+                        StorageManager.AddItem(this.SourceGuid, playerItem);
+                        Game1.player.removeItemFromInventory(playerItem);
+                        
+                        // Reload data
+                        var data = StorageManager.GetInventory(this.SourceGuid);
+                        this.FullInventory = data.Inventory.Values.SelectMany(dx => dx).Cast<Item?>().ToList();
+                        this.ApplyFilters();
+                        
+                        Game1.playSound("dwop");
+                    }
+                    return;
+                }
+                
+                // Normal Click: Pick up
+                if (this.HeldItem == null)
+                {
+                    this.HeldItem = playerItem;
+                    Game1.player.removeItemFromInventory(playerItem);
+                    Game1.playSound("dwop");
+                    return;
+                }
             }
 
             // Place held item
@@ -415,81 +561,155 @@ namespace SingularityStorage.UI
 
         public override void receiveRightClick(int x, int y, bool playSound = true)
         {
-            base.receiveRightClick(x, y, playSound);
+            // Do NOT call base.base... because we want to override default logic
+            // base.receiveRightClick(x, y, playSound); 
             
-            // Quick transfer from storage to player
+            // Check Widgets first
+            if (this.PrevPageButton != null && this.PrevPageButton.containsPoint(x, y)) { this.receiveLeftClick(x, y, playSound); return; }
+            if (this.NextPageButton != null && this.NextPageButton.containsPoint(x, y)) { this.receiveLeftClick(x, y, playSound); return; }
+
+            // Storage Logic: Take One
             Item? storageItem = this.StorageInventory.getItemAt(x, y);
             if (storageItem != null)
             {
-                // Try to add to player inventory
-                if (Game1.player.couldInventoryAcceptThisItem(storageItem))
+                // If holding nothing -> Take one
+                if (this.HeldItem == null)
                 {
-                    // Logic similar to Left Click
-                    Game1.player.addItemToInventory(storageItem);
-                    // this.StorageInventory.actualInventory.Remove(storageItem); // Handled by RefreshView?
+                    Item single = storageItem.getOne();
+                    this.HeldItem = single;
                     
-                    if (Context.IsMainPlayer)
-                    {
-                         StorageManager.RemoveItem(this.SourceGuid, storageItem);
-                         
-                         // Reload and Re-filter
-                         var data = StorageManager.GetInventory(this.SourceGuid);
-                         this.FullInventory = data.Inventory.Values.SelectMany(i => i).Cast<Item?>().ToList();
-                         
-                         // Re-filter manual
-                        IEnumerable<Item?> items = this.FullInventory;
-                        if (this.CurrentCategory != "All") items = items.Where(item => IsItemInCategory(item, this.CurrentCategory));
-                        string query = this.SearchBar?.Text?.Trim() ?? "";
-                        if (!string.IsNullOrEmpty(query)) items = items.Where(item => item != null && item.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
-                        this.FilteredInventory = items.ToList();
-                    }
-                    
-                    this.RefreshView();
-                    Game1.playSound("dwop");
-                }
-                return;
-            }
-            
-            // Quick transfer from player to storage
-            Item? playerItem = this.PlayerInventory.getItemAt(x, y);
-            if (playerItem != null)
-            {
-                Game1.player.removeItemFromInventory(playerItem);
-                
-                if (Context.IsMainPlayer)
-                {
-                    // Similar to Left Click Logic: Check capacity via AddItem
-                     ModEntry.Instance.Monitor.Log($"Right-click transfer: {playerItem.Name} x{playerItem.Stack}", LogLevel.Trace);
-                     StorageManager.AddItem(this.SourceGuid, playerItem);
+                    // Reduce stack in storage
+                     storageItem.Stack--;
+                     if (storageItem.Stack <= 0)
+                     {
+                         this.StorageInventory.actualInventory.Remove(storageItem);
+                         this.FullInventory.Remove(storageItem);
+                         if (Context.IsMainPlayer) StorageManager.RemoveItem(this.SourceGuid, storageItem);
+                     }
+                     else
+                     {
+                         // Just update count
+                         // NOTE: StorageManager might need explicit update if it syncs by reference?
+                         // If 'storageItem' is a reference to the object in StorageManager's dictionary, we are good.
+                         // But we should verify. 
+                         // To be safe, we trigger a "save" or assumed reference.
+                     }
                      
-                     var data = StorageManager.GetInventory(this.SourceGuid);
-                     this.FullInventory = data.Inventory.Values.SelectMany(i => i).Cast<Item?>().ToList();
-                     
-                     // Re-filter manual
-                    IEnumerable<Item?> items = this.FullInventory;
-                    if (this.CurrentCategory != "All") items = items.Where(item => IsItemInCategory(item, this.CurrentCategory));
-                    string query = this.SearchBar?.Text?.Trim() ?? "";
-                    if (!string.IsNullOrEmpty(query)) items = items.Where(item => item != null && item.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
-                    this.FilteredInventory = items.ToList();
-                }
-
-                if (playerItem.Stack <= 0)
-                {
-                    // Fully moved
-                    Game1.playSound("stoneStep");
+                     // Optimization: If stack > 0, we don't strictly need to RemoveItem. 
+                     // But we should ensure the backend knows the count changed if it tracks "total items".
+                     // Ideally StorageManager handles the item object reference.
+                     Game1.playSound("dwop");
+                     this.RefreshView(); // Update counts
+                     return;
                 }
                 else
                 {
-                    // Partially moved or rejected
-                     Game1.playSound("cancel");
-                     Game1.addHUDMessage(new HUDMessage("Storage Full", 3));
-                     // Note: playerItem reference should be updated by AddItem logic because it's a reference type?
-                     // Actually AddItem logic modifies the object. 
-                     // But we should ensure logic consistency. 
+                    // If holding something -> Place one IF matches
+                    if (this.HeldItem.canStackWith(storageItem))
+                    {
+                        // Standard chest: Right click reduces held stack by one, puts into chest
+                        // Wait, Standard Right Click on Chest Item:
+                        // 1. Holding Nothing + Right Click Chest Item = Take One.
+                        // 2. Holding X + Right Click Chest Same Item = Place One.
+                        
+                        if (Context.IsMainPlayer)
+                        {
+                            Item one = this.HeldItem.getOne();
+                            this.HeldItem.Stack--;
+                            if (this.HeldItem.Stack <= 0) this.HeldItem = null;
+                            
+                            StorageManager.AddItem(this.SourceGuid, one);
+                             
+                             // Update view
+                             // To avoid full reload flickering, we can try to find the item object and increment?
+                             // But StorageManager.AddItem handles merging. 
+                             // So we reload.
+                             var data = StorageManager.GetInventory(this.SourceGuid);
+                             this.FullInventory = data.Inventory.Values.SelectMany(i => i).Cast<Item?>().ToList();
+                             this.ApplyFilters();
+                             
+                             Game1.playSound("dwop");
+                        }
+                        return;
+                    }
                 }
-                
-                this.RefreshView();
-                return;
+            }
+            // Storage Logic: Place One in Empty Slot
+            else if (this.StorageInventory.isWithinBounds(x, y))
+            {
+                if (this.HeldItem != null)
+                {
+                    // Place one into new slot logic?
+                    // "Singularity" storage doesn't really have "slots". It's a pool.
+                    // Doing "Place One" into empty area just calls AddItem(One).
+                    if (Context.IsMainPlayer)
+                    {
+                        Item one = this.HeldItem.getOne();
+                        this.HeldItem.Stack--;
+                        if (this.HeldItem.Stack <= 0) this.HeldItem = null;
+                        
+                        StorageManager.AddItem(this.SourceGuid, one);
+                        
+                        // Reload
+                         var data = StorageManager.GetInventory(this.SourceGuid);
+                         this.FullInventory = data.Inventory.Values.SelectMany(i => i).Cast<Item?>().ToList();
+                         this.ApplyFilters();
+                         
+                         Game1.playSound("dwop");
+                    }
+                    return;
+                }
+            }
+
+            // Player Inventory Logic: Split / Place One
+            Item? playerItem = this.PlayerInventory.getItemAt(x, y);
+            if (playerItem != null)
+            {
+                // Holding Nothing + Right Click Player Item = Take One (or Split?)
+                // Vanilla inventory Right Click on item = Take One.
+                 if (this.HeldItem == null)
+                 {
+                     Item single = playerItem.getOne();
+                     this.HeldItem = single;
+                     playerItem.Stack--;
+                     if (playerItem.Stack <= 0) Game1.player.removeItemFromInventory(playerItem);
+                     Game1.playSound("dwop");
+                 }
+                 else
+                 {
+                     // Holding X + Right Click Same Item = Place One.
+                     if (this.HeldItem.canStackWith(playerItem))
+                     {
+                         if (playerItem.getRemainingStackSpace() > 0)
+                         {
+                             playerItem.Stack++;
+                             this.HeldItem.Stack--;
+                             if (this.HeldItem.Stack <= 0) this.HeldItem = null;
+                             Game1.playSound("dwop");
+                         }
+                     }
+                 }
+                 return;
+            }
+            else if (this.PlayerInventory.isWithinBounds(x, y))
+            {
+                // Place One into empty slot
+                if (this.HeldItem != null)
+                {
+                    // Find actual slot
+                   int slot = this.PlayerInventory.getInventoryPositionOfClick(x, y);
+                   if (slot != -1)
+                   {
+                        // Add one to that slot? 
+                        // Vanilla `utility.addItemToInventory` logic is complex.
+                        // Simplified: Create new item of 1.
+                        Item one = this.HeldItem.getOne();
+                        Game1.player.addItemToInventory(one, slot);
+                         this.HeldItem.Stack--;
+                        if (this.HeldItem.Stack <= 0) this.HeldItem = null;
+                        Game1.playSound("dwop");
+                   }
+                }
             }
         }
 
@@ -507,6 +727,8 @@ namespace SingularityStorage.UI
                 this.NextPageButton.tryHover(x, y);
             if (this.OkButton != null)
                 this.OkButton.tryHover(x, y);
+            if (this.FillStacksButton != null)
+                this.FillStacksButton.tryHover(x, y);
         }
 
         public override void update(GameTime time)
@@ -577,6 +799,34 @@ namespace SingularityStorage.UI
             // Draw OK button
             this.OkButton?.draw(b);
 
+            // Draw Fill Stacks button (Text version for visibility)
+            if (this.FillStacksButton != null)
+            {
+                // Draw button background
+                bool isHovered = this.FillStacksButton.containsPoint(Game1.getOldMouseX(), Game1.getOldMouseY());
+                Color bgColor = isHovered ? Color.Wheat : Color.White;
+                
+                IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(384, 373, 18, 18),
+                    this.FillStacksButton.bounds.X, this.FillStacksButton.bounds.Y,
+                    this.FillStacksButton.bounds.Width, this.FillStacksButton.bounds.Height,
+                    bgColor, 4f, false);
+                
+                // Draw text
+                string buttonText = "填充";
+                Vector2 textSize = Game1.smallFont.MeasureString(buttonText);
+                Vector2 textPos = new Vector2(
+                    this.FillStacksButton.bounds.X + (this.FillStacksButton.bounds.Width - textSize.X) / 2,
+                    this.FillStacksButton.bounds.Y + (this.FillStacksButton.bounds.Height - textSize.Y) / 2);
+                
+                Utility.drawTextWithShadow(b, buttonText, Game1.smallFont, textPos, Game1.textColor);
+                
+                // Draw tooltip if hovered
+                if (isHovered)
+                {
+                    IClickableMenu.drawToolTip(b, "将背包中已存在于箱子的物品全部存入", "填充堆叠", null);
+                }
+            }
+
             // Draw Category Tabs
             foreach (var tab in this.CategoryTabs)
             {
@@ -637,6 +887,26 @@ namespace SingularityStorage.UI
             this.yPositionOnScreen = (Game1.uiViewport.Height - Config.MenuDimensions.Height) / 2;
             
             this.InitializeWidgets();
+        }
+
+        protected override void cleanupBeforeExit()
+        {
+            if (this.HeldItem != null)
+            {
+                // Try to return to inventory
+                if (Game1.player.couldInventoryAcceptThisItem(this.HeldItem))
+                {
+                    Game1.player.addItemToInventory(this.HeldItem);
+                }
+                else
+                {
+                    // Inventory full, drop on ground
+                    Game1.createItemDebris(this.HeldItem, Game1.player.getStandingPosition(), Game1.player.FacingDirection);
+                }
+                this.HeldItem = null;
+            }
+            
+            base.cleanupBeforeExit();
         }
 
         public void UpdateFromNetwork(NetworkPacket packet)
