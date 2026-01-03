@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using StardewModdingAPI;
 using StardewValley;
 using SingularityStorage.Data;
@@ -13,16 +9,16 @@ namespace SingularityStorage
     /// </summary>
     public static class StorageManager
     {
-        private static IMonitor? Monitor;
-        private static IDataHelper? DataHelper;
+        private static IMonitor? _monitor;
+        private static IDataHelper? _dataHelper;
         
         // Cache: GUID -> InventoryData
         private static readonly Dictionary<string, SingularityInventoryData> LoadedInventories = new();
 
         public static void Initialize(IMonitor monitor, IDataHelper dataHelper)
         {
-            Monitor = monitor;
-            DataHelper = dataHelper;
+            _monitor = monitor;
+            _dataHelper = dataHelper;
         }
 
         /// <summary>
@@ -39,8 +35,8 @@ namespace SingularityStorage
             }
 
             // Try load from file
-            string filename = $"SingularityInventory_{guid}.json";
-            data = DataHelper!.ReadJsonFile<SingularityInventoryData>($"SaveData/{filename}") ?? new SingularityInventoryData(guid);
+            var filename = $"SingularityInventory_{guid}.json";
+            data = _dataHelper!.ReadJsonFile<SingularityInventoryData>($"SaveData/{filename}") ?? new SingularityInventoryData(guid);
             
             LoadedInventories[guid] = data;
             return data;
@@ -50,64 +46,58 @@ namespace SingularityStorage
         /// Adds an item to the storage.
         /// </summary>
         /// <returns>True if the item was fully or partially added; false if rejected due to capacity.</returns>
-        public static bool AddItem(string guid, Item item)
+        public static bool AddItem(string guid, Item? item)
         {
             if (item == null || item.Stack <= 0) return false;
             
             var data = GetInventory(guid);
-            string key = item.QualifiedItemId;
+            var key = item.QualifiedItemId;
 
             if (!data.Inventory.ContainsKey(key))
             {
                 data.Inventory[key] = new List<Item>();
             }
 
-            List<Item> stackList = data.Inventory[key];
-            bool added = false;
+            var stackList = data.Inventory[key];
+            var added = false;
 
             // 1. Try to merge with existing stacks (doesn't increase slot usage)
-            foreach (Item existing in stackList)
+            foreach (var existing in stackList)
             {
-                if (existing.canStackWith(item))
+                if (!existing.canStackWith(item)) continue;
+                var available = existing.maximumStackSize() - existing.Stack;
+                if (available <= 0) continue;
+                var toAdd = Math.Min(available, item.Stack);
+                existing.Stack += toAdd;
+                item.Stack -= toAdd;
+                added = true;
+                if (item.Stack <= 0)
                 {
-                    int available = existing.maximumStackSize() - existing.Stack;
-                    if (available > 0)
-                    {
-                        int toAdd = Math.Min(available, item.Stack);
-                        existing.Stack += toAdd;
-                        item.Stack -= toAdd;
-                        added = true;
-                        if (item.Stack <= 0)
-                        {
-                            break;
-                        }
-                    }
+                    break;
                 }
             }
 
             // 2. If we still have items to add, we need a new slot.
-            if (item.Stack > 0)
+            if (item.Stack <= 0) return added;
+            // Check Capacity
+            var currentUsedSlots = data.Inventory.Values.Sum(list => list.Count);
+            if (currentUsedSlots >= data.MaxCapacity)
             {
-                // Check Capacity
-                int currentUsedSlots = data.Inventory.Values.Sum(list => list.Count);
-                if (currentUsedSlots >= data.MaxCapacity)
-                {
-                    Monitor?.Log($"Add Item Rejected: Storage Full ({currentUsedSlots}/{data.MaxCapacity})", LogLevel.Warn);
-                    return added;
-                }
-
-                Monitor?.Log($"Adding new stack: {item.Name} x{item.Stack}", LogLevel.Trace);
-                
-                // Copy the item to storage
-                Item storedItem = item.getOne();
-                storedItem.Stack = item.Stack;
-                stackList.Add(storedItem);
-                
-                // Mark input item as fully consumed
-                item.Stack = 0;
-                added = true;
+                _monitor?.Log($"Add Item Rejected: Storage Full ({currentUsedSlots}/{data.MaxCapacity})", LogLevel.Warn);
+                return added;
             }
-            
+
+            _monitor?.Log($"Adding new stack: {item.Name} x{item.Stack}", LogLevel.Trace);
+                
+            // Copy the item to storage
+            var storedItem = item.getOne();
+            storedItem.Stack = item.Stack;
+            stackList.Add(storedItem);
+                
+            // Mark input item as fully consumed
+            item.Stack = 0;
+            added = true;
+
             return added;
         }
 
@@ -118,7 +108,7 @@ namespace SingularityStorage
         {
             var data = GetInventory(guid);
             data.MaxCapacity += increment;
-            Monitor?.Log($"Upgraded storage {guid} capacity to {data.MaxCapacity} (+{increment})", LogLevel.Info);
+            _monitor?.Log($"Upgraded storage {guid} capacity to {data.MaxCapacity} (+{increment})", LogLevel.Info);
         }
 
         /// <summary>
@@ -127,24 +117,24 @@ namespace SingularityStorage
         public static (int Used, int Max) GetCounts(string guid)
         {
             var data = GetInventory(guid);
-            int used = data.Inventory.Values.Sum(list => list.Count);
+            var used = data.Inventory.Values.Sum(list => list.Count);
             return (used, data.MaxCapacity);
         }
 
         /// <summary>
         /// Removes an item from the storage.
         /// </summary>
-        public static void RemoveItem(string guid, Item item)
+        public static void RemoveItem(string guid, Item? item)
         {
             if (item == null) return;
             
             var data = GetInventory(guid);
-            string key = item.QualifiedItemId;
+            var key = item.QualifiedItemId;
 
             if (!data.Inventory.ContainsKey(key))
                 return;
 
-            List<Item> stackList = data.Inventory[key];
+            var stackList = data.Inventory[key];
             stackList.Remove(item);
 
             // Clean up empty lists
@@ -159,14 +149,14 @@ namespace SingularityStorage
         /// </summary>
         public static void SaveAll()
         {
-            if (DataHelper == null) return;
+            if (_dataHelper == null) return;
 
-            Monitor?.Log($"Saving {LoadedInventories.Count} external inventories...", LogLevel.Info);
+            _monitor?.Log($"Saving {LoadedInventories.Count} external inventories...", LogLevel.Info);
 
             foreach (var kvp in LoadedInventories)
             {
-                string filename = $"SingularityInventory_{kvp.Key}.json";
-                DataHelper.WriteJsonFile($"SaveData/{filename}", kvp.Value);
+                var filename = $"SingularityInventory_{kvp.Key}.json";
+                _dataHelper.WriteJsonFile($"SaveData/{filename}", kvp.Value);
             }
         }
         

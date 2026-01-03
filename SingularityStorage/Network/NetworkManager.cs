@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
@@ -9,13 +6,13 @@ namespace SingularityStorage.Network
 {
     public static class NetworkManager
     {
-        private static IModHelper? Helper;
-        private static IMonitor? Monitor;
+        private static IModHelper? _helper;
+        private static IMonitor? _monitor;
         
         public static void Initialize(IModHelper helper, IMonitor monitor)
         {
-            Helper = helper;
-            Monitor = monitor;
+            _helper = helper;
+            _monitor = monitor;
             helper.Events.Multiplayer.ModMessageReceived += OnMessageReceived;
         }
 
@@ -31,12 +28,12 @@ namespace SingularityStorage.Network
                 SearchQuery = query
             };
 
-            Helper!.Multiplayer.SendMessage(packet, "RequestView", modIDs: new[] { Helper.ModRegistry.ModID });
+            _helper!.Multiplayer.SendMessage(packet, "RequestView", modIDs: new[] { _helper.ModRegistry.ModID });
         }
 
         private static void OnMessageReceived(object? sender, ModMessageReceivedEventArgs e)
         {
-            if (Helper == null || e.FromModID != Helper.ModRegistry.ModID) return;
+            if (_helper == null || e.FromModID != _helper.ModRegistry.ModID) return;
 
             if (e.Type == "RequestView" && Context.IsMainPlayer)
             {
@@ -71,9 +68,9 @@ namespace SingularityStorage.Network
                 allItems = allItems.Where(i => i.DisplayName.Contains(packet.SearchQuery, StringComparison.OrdinalIgnoreCase)).ToList();
             }
             
-            int totalItems = allItems.Count;
+            var totalItems = allItems.Count;
             // Slice
-            int skip = packet.PageIndex * 36;
+            var skip = packet.PageIndex * 36;
             var pageItems = allItems.Skip(skip).Take(36).Cast<Item?>().ToList();
             
             var response = new NetworkPacket

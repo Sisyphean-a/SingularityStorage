@@ -1,15 +1,12 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using StardewModdingAPI;
 using StardewValley;
 using StardewValley.Menus;
-using StardewValley.Tools;
 using SingularityStorage.Network;
+using SingularityStorage.UI.Components;
+using SingularityStorage.UI.Controllers;
 
 namespace SingularityStorage.UI
 {
@@ -21,52 +18,41 @@ namespace SingularityStorage.UI
         {
             get
             {
-                if (_config == null)
-                {
-                    string configPath = Path.Combine(ModEntry.Instance!.Helper.DirectoryPath, "UI", "MenuConfig.json");
-                    _config = MenuConfig.Load(configPath);
-                }
+                if (_config != null) return _config;
+                var configPath = Path.Combine(ModEntry.Instance!.Helper.DirectoryPath, "UI", "MenuConfig.json");
+                _config = MenuConfig.Load(configPath);
                 return _config;
             }
         }
 
         // Core Data
-        private string SourceGuid;
-        private List<Item?> FullInventory = new List<Item?>(); 
-        private List<Item?> FilteredInventory = new List<Item?>();
-        private int CurrentPage = 0;
+        private string _sourceGuid;
+        private List<Item?> _fullInventory = new List<Item?>(); 
+        private List<Item?> _filteredInventory = new List<Item?>();
         private int ItemsPerPage => Config.StorageInventory.Columns * Config.StorageInventory.Rows;
-
-        // Categories
-        private List<ClickableComponent> CategoryTabs = new List<ClickableComponent>();
-        private List<ClickableComponent> SubCategoryTabs = new List<ClickableComponent>();
-        private string SelectedGroup = "全部";
-        private int? SelectedSubCategory = null; // null means 'All' in sub-category
         
-        private readonly List<string> Groups = Data.CategoryData.Tabs;
-        private const int TabWidth = 110; // Wider tabs as requested
-        private const int TabHeight = 64; 
+        private string _cachedCapacityText = "";
         
-        private string CachedCapacityText = "";
+        // Components
+        private CategorySidebar _sidebar;
+        private PaginationControl _pagination;
+        private InventoryHandler _inventoryHandler;
 
-        // UI Components
-        private InventoryMenu StorageInventory;
-        private InventoryMenu PlayerInventory;
-        private ClickableTextureComponent? NextPageButton;
-        private ClickableTextureComponent? PrevPageButton;
-        private TextBox? SearchBar;
-        private ClickableTextureComponent? OkButton;
-        private ClickableTextureComponent? FillStacksButton;
+        // UI Widgets
+        private InventoryMenu _storageInventory;
+        private InventoryMenu _playerInventory;
+        private TextBox? _searchBar;
+        private ClickableTextureComponent? _okButton;
+        private ClickableTextureComponent? _fillStacksButton;
         
         // State
-        private string LastSearchText = "";
-        private bool IsLoading = false;
-        private Item? HoverItem;
-        private Item? HeldItem;
+        private string _lastSearchText = "";
+        private bool _isLoading;
+        private Item? _hoverItem;
 
-        public SingularityMenu(string guid) : base()
+        public SingularityMenu(string guid)
         {
-            this.SourceGuid = guid;
+            this._sourceGuid = guid;
 
             // Load dimensions from config
             this.width = Config.MenuDimensions.Width;
@@ -75,7 +61,7 @@ namespace SingularityStorage.UI
             this.yPositionOnScreen = (Game1.uiViewport.Height - this.height) / 2;
 
             // Initialize Storage Inventory from config
-            this.StorageInventory = new InventoryMenu(
+            this._storageInventory = new InventoryMenu(
                 this.xPositionOnScreen + Config.StorageInventory.OffsetX,
                 this.yPositionOnScreen + Config.StorageInventory.OffsetY,
                 false,
@@ -84,39 +70,53 @@ namespace SingularityStorage.UI
                 ItemsPerPage,
                 Config.StorageInventory.Rows,
                 Config.StorageInventory.SlotSpacing,
-                Config.StorageInventory.SlotSpacing,
-                true
+                Config.StorageInventory.SlotSpacing
             );
 
             // Initialize Player Inventory from config
-            this.PlayerInventory = new InventoryMenu(
+            this._playerInventory = new InventoryMenu(
                 this.xPositionOnScreen + Config.PlayerInventory.OffsetX,
                 this.yPositionOnScreen + this.height - Config.PlayerInventory.OffsetFromBottom,
                 true
             );
+
+            // Initialize Components
+            this._sidebar = new CategorySidebar();
+            this._pagination = new PaginationControl(ItemsPerPage);
+            this._inventoryHandler = new InventoryHandler(
+                guid, 
+                this._storageInventory, 
+                this._playerInventory,
+                () => this._fullInventory, 
+                () => this.ApplyFilters() // Refresh callback calls ApplyFilters to re-sort/filter
+            );
+            
+            // Wire Events
+            this._sidebar.OnFilterChanged += this.ApplyFilters;
+            this._pagination.OnPageChanged += this.RefreshView;
 
             this.InitializeWidgets();
 
             if (Context.IsMainPlayer)
             {
                 var data = StorageManager.GetInventory(guid);
-                this.FullInventory = data.Inventory.Values.SelectMany(x => x).Cast<Item?>().ToList();
-                this.FilteredInventory = this.FullInventory;
+                this._fullInventory = data.Inventory.Values.SelectMany(x => x).Cast<Item?>().ToList();
+                this._filteredInventory = this._fullInventory;
                 this.RefreshView();
             }
             else
             {
-                this.IsLoading = true;
+                this._isLoading = true;
                 NetworkManager.SendRequestView(guid, 0, "");
             }
         }
 
         private void InitializeWidgets()
         {
-            int headerY = this.yPositionOnScreen + Config.Header.OffsetY;
+            var headerY = this.yPositionOnScreen + Config.Header.OffsetY;
 
-            // Search Bar from config
-            this.SearchBar = new TextBox(
+            // Search Bar
+            this._searchBar = new TextBox(
                 Game1.content.Load<Texture2D>("LooseSprites\\textBox"), 
                 null, 
                 Game1.smallFont, 
@@ -128,31 +128,14 @@ namespace SingularityStorage.UI
                 Height = Config.SearchBar.Height
             };
 
-            // Page Buttons from config
-            this.PrevPageButton = new ClickableTextureComponent(
-                new Rectangle(
-                    this.xPositionOnScreen + Config.PageButtons.PrevOffsetX,
-                    headerY,
-                    Config.PageButtons.Width,
-                    Config.PageButtons.Height),
-                Game1.mouseCursors,
-                new Rectangle(352, 495, 12, 11),
-                4f);
-
-            this.NextPageButton = new ClickableTextureComponent(
-                new Rectangle(
-                    this.xPositionOnScreen + Config.PageButtons.NextOffsetX,
-                    headerY,
-                    Config.PageButtons.Width,
-                    Config.PageButtons.Height),
-                Game1.mouseCursors,
-                new Rectangle(365, 495, 12, 11),
-                4f);
+            // Components Init
+            this._sidebar.Initialize(this.xPositionOnScreen, this.yPositionOnScreen);
+            this._pagination.Initialize(this.xPositionOnScreen, this.yPositionOnScreen, Config);
 
             // Fill Stacks Button
             if (Config.FillStacksButton != null)
             {
-                 Rectangle srcRect = new Rectangle(103, 469, 16, 16);
+                 var srcRect = new Rectangle(103, 469, 16, 16);
                  if (Config.FillStacksButton.TextureSource != null)
                  {
                      srcRect = new Rectangle(
@@ -162,13 +145,12 @@ namespace SingularityStorage.UI
                          Config.FillStacksButton.TextureSource.Height);
                  }
                  
-                 float scale = Config.FillStacksButton.Size / (float)srcRect.Width;
+                 var scale = Config.FillStacksButton.Size / (float)srcRect.Width;
                  
-                 // Position: Right side of header area, next to search bar
-                 int buttonX = this.xPositionOnScreen + this.width - Config.FillStacksButton.OffsetFromRight - Config.FillStacksButton.Size;
-                 int buttonY = this.yPositionOnScreen + Config.Header.OffsetY + 8; // Align with header
+                 var buttonX = this.xPositionOnScreen + this.width - Config.FillStacksButton.OffsetFromRight - Config.FillStacksButton.Size;
+                 var buttonY = this.yPositionOnScreen + Config.Header.OffsetY + 8; 
                  
-                 this.FillStacksButton = new ClickableTextureComponent(
+                 this._fillStacksButton = new ClickableTextureComponent(
                     new Rectangle(
                         buttonX,
                         buttonY,
@@ -177,16 +159,10 @@ namespace SingularityStorage.UI
                     Game1.mouseCursors,
                     srcRect,
                     scale);
-                    
-                 ModEntry.Instance.Monitor.Log($"FillStacksButton created at ({buttonX}, {buttonY}), size: {Config.FillStacksButton.Size}", StardewModdingAPI.LogLevel.Debug);
-            }
-            else
-            {
-                ModEntry.Instance.Monitor.Log("FillStacksButton config is NULL!", StardewModdingAPI.LogLevel.Warn);
             }
 
-            // OK Button from config
-            this.OkButton = new ClickableTextureComponent(
+            // OK Button
+            this._okButton = new ClickableTextureComponent(
                 new Rectangle(
                     this.xPositionOnScreen + this.width - Config.OkButton.OffsetFromRight,
                     this.yPositionOnScreen + this.height - Config.OkButton.OffsetFromBottom,
@@ -195,603 +171,168 @@ namespace SingularityStorage.UI
                 Game1.mouseCursors,
                 Game1.getSourceRectForStandardTileSheet(Game1.mouseCursors, 46),
                 1f);
-
-            // Initialize Category Tabs (Major Groups)
-            this.CategoryTabs.Clear();
-            // Major tabs are on the far left (Column 1)
-            // Column 2 will be between Major tabs and the menu window
-            // So Major tabs X = xPosition - (TabWidth * 2)
-            // Sub tabs X = xPosition - TabWidth
-            
-            int majorTabX = this.xPositionOnScreen - (TabWidth * 2) - 8; // Extra padding
-            int tabY = this.yPositionOnScreen + 64;
-            
-            for (int i = 0; i < this.Groups.Count; i++)
-            {
-                this.CategoryTabs.Add(new ClickableComponent(
-                    new Rectangle(majorTabX, tabY + (i * TabHeight), TabWidth, TabHeight), 
-                    this.Groups[i]));
-            }
-            
-            // Initialize Sub Tabs (Column 2) based on current selection
-            this.UpdateSubCategories();
-        }
-
-        private void UpdateSubCategories()
-        {
-            this.SubCategoryTabs.Clear();
-            int subTabX = this.xPositionOnScreen - TabWidth;
-            int tabY = this.yPositionOnScreen + 64;
-            
-            // Always add "All" (全部) option for sub-category
-            this.SubCategoryTabs.Add(new ClickableComponent(
-                new Rectangle(subTabX, tabY, TabWidth, TabHeight), 
-                "全部") 
-            { 
-                myID = -9999 // Special ID for 'All'
-            });
-            
-            if (Data.CategoryData.CategoryGroups.TryGetValue(this.SelectedGroup, out var subCats))
-            {
-                 for (int i = 0; i < subCats.Count; i++)
-                 {
-                     int catId = subCats[i];
-                     string name = Data.CategoryData.GetCategoryName(catId);
-                     
-                     this.SubCategoryTabs.Add(new ClickableComponent(
-                        new Rectangle(subTabX, tabY + ((i + 1) * TabHeight), TabWidth, TabHeight), 
-                        name)
-                     {
-                         myID = catId
-                     });
-                 }
-            }
         }
 
         private void RefreshView()
         {
             if (!Context.IsMainPlayer)
             {
-                this.IsLoading = true;
-                NetworkManager.SendRequestView(this.SourceGuid, this.CurrentPage, this.SearchBar?.Text ?? "");
+                this._isLoading = true;
+                NetworkManager.SendRequestView(this._sourceGuid, this._pagination.CurrentPage, this._searchBar?.Text ?? "");
                 return;
             }
 
-            int totalItems = this.FilteredInventory.Count;
-            int totalPages = (int)Math.Ceiling(totalItems / (double)ItemsPerPage);
+            // Reload data from source mainly to ensure sync, 
+            // but we usually have FullInventory updated.
+            // If we want to be super safe:
+            var data = StorageManager.GetInventory(this._sourceGuid);
+            this._fullInventory = data.Inventory.Values.SelectMany(x => x).Cast<Item?>().ToList();
+            
+            // Re-apply filter logic (without resetting page if possible, but ApplyFilters usually resets page)
+            // Here we just want to update the VIEW based on current FilteredInventory and Page.
+            // But if FullInventory changed, we might need to re-filter.
+            // Let's assume FilteredInventory is up to date relative to FullInventory unless we just added/removed items.
+            // Actually, InventoryHandler updates storage and calls this.
+            // So we DO need to re-filter. calling this.ApplyFilters() logic.
+            
+            // But ApplyFilters resets Page to 0. That's bad for "Next Page" click.
+            // So we separate "UpdateList" from "ResetFilter".
+            
+            this.UpdateFilteredList();
+
+            var totalItems = this._filteredInventory.Count;
+            var totalPages = (int)Math.Ceiling(totalItems / (double)ItemsPerPage);
             if (totalPages == 0) totalPages = 1;
 
-            if (this.CurrentPage >= totalPages) this.CurrentPage = totalPages - 1;
-            if (this.CurrentPage < 0) this.CurrentPage = 0;
-
-            int startIndex = this.CurrentPage * ItemsPerPage;
-            var pageItems = this.FilteredInventory
+            if (this._pagination.CurrentPage >= totalPages) this._pagination.ResetPage(); // Or set to max
+            
+            var startIndex = this._pagination.CurrentPage * ItemsPerPage;
+            var pageItems = this._filteredInventory
                 .Skip(startIndex)
                 .Take(ItemsPerPage)
                 .ToList();
 
-            this.StorageInventory.actualInventory = pageItems.Cast<Item>().ToList();
+            this._storageInventory.actualInventory = pageItems.Cast<Item>().ToList();
             
-            // Pad with nulls to fill the page, ensuring 36 slots appear
-            // Actually, InventoryMenu handles partial lists by just showing them.
-            // If the user wants to see empty slots, we might need to ensure the capacity limit visual is handled?
-            // The issue "cannot page flip" is because we are taking `ItemsPerPage` items.
-            // If FilteredInventory.Count > ItemsPerPage, pagination should work.
-            // Let's debug totalItems:
-            // int totalItems = this.FilteredInventory.Count;
-            
-            // Update Capacity Text
-           var (used, max) = StorageManager.GetCounts(this.SourceGuid);
-           this.CachedCapacityText = $"{used} / {max}";
-           
-           ModEntry.Instance.Monitor.Log($"RefreshView: Total={totalItems}, Pages={totalPages}, CurrentPage={this.CurrentPage}, Capacity={used}/{max}", LogLevel.Trace);
+            var (used, max) = StorageManager.GetCounts(this._sourceGuid);
+            this._cachedCapacityText = $"{used} / {max}";
         }
 
-        private void UpdateSearch()
+        private void UpdateFilteredList()
         {
-            // Only re-apply filter if query changed
-            string query = this.SearchBar?.Text?.Trim() ?? "";
-            if (query != this.LastSearchText)
-            {
-                 // ApplyFilters handles the logic and update
-                 this.ApplyFilters();
-            }
-            // ELSE: Do nothing. This prevents resetting CurrentPage to 0 every frame.
+             var query = this._searchBar?.Text?.Trim() ?? "";
+             
+             IEnumerable<Item?> items = this._fullInventory;
+
+             // 1. Filter by Category Group
+             if (this._sidebar.SelectedGroup != "全部")
+             {
+                 items = items.Where(item => Data.CategoryData.IsItemInGroup(item, this._sidebar.SelectedGroup));
+                 
+                 // 2. Filter by SubCategory
+                 if (this._sidebar.SelectedSubCategory.HasValue && this._sidebar.SelectedSubCategory.Value != -9999)
+                 {
+                     items = items.Where(item => item != null && item.Category == this._sidebar.SelectedSubCategory.Value);
+                 }
+             }
+
+             // 3. Filter by Search
+             if (!string.IsNullOrEmpty(query))
+             {
+                 items = items.Where(item => item != null && item.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
+             }
+
+             this._filteredInventory = items.ToList();
         }
 
         private void ApplyFilters()
         {
-            string query = this.SearchBar?.Text?.Trim() ?? "";
-            this.LastSearchText = query;
-            this.CurrentPage = 0; // Reset page when filter applied
-
-            if (Context.IsMainPlayer)
-            {
-                IEnumerable<Item?> items = this.FullInventory;
-
-                // 1. Filter by Category Group
-                if (this.SelectedGroup != "全部")
-                {
-                    items = items.Where(item => Data.CategoryData.IsItemInGroup(item, this.SelectedGroup));
-                    
-                    // 2. Filter by SubCategory
-                    if (this.SelectedSubCategory.HasValue && this.SelectedSubCategory.Value != -9999)
-                    {
-                        items = items.Where(item => item != null && item.Category == this.SelectedSubCategory.Value);
-                    }
-                }
-
-                // 3. Filter by Search
-                if (!string.IsNullOrEmpty(query))
-                {
-                    items = items.Where(item => item != null && item.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
-                }
-
-                this.FilteredInventory = items.ToList();
-            }
-            
+            this.UpdateFilteredList();
+            this._pagination.ResetPage();
             this.RefreshView();
         }
 
-
+        private void UpdateSearch()
+        {
+            var query = this._searchBar?.Text?.Trim() ?? "";
+            if (query != this._lastSearchText)
+            {
+                 this._lastSearchText = query;
+                 this.ApplyFilters();
+            }
+        }
         
         private void FillExistingStacks()
         {
-            if (!Context.IsMainPlayer)
-            {
-                // Network packet: RequestFillStacks
-                // Not implemented yet on backend, so we might skip or log warning.
-                // Assuming we can send a custom message or just "Add" remaining compatible items logic locally then sync? 
-                // No, complex operations should be server-side or iterative.
-                // For now, let's implement the iterated client-side logic for simplicity, 
-                // though it might spam packets.
-                // Better approach: Iterate locally, find matches, send Add requests.
-            }
-            
-            // Logic: Scan Player Inventory. If item exists in Storage, move it.
-            // Note: Efficient matching requires knowing Storage contents.
-            // We have FullInventory locally (replicated).
-            
-            var playerItems = Game1.player.Items.Where(i => i != null).ToList();
-            bool changed = false;
+             // Similar to original, logic could be moved to Handler but kept here for now as it orchestrates.
+             // Handler handles single clicks.
+             var playerItems = Game1.player.Items.Where(i => i != null).ToList();
+             var changed = false;
 
-            foreach (var pItem in playerItems)
-            {
-                if (pItem == null) continue;
-                
-                // Check if similar item exists in Storage
-                // Standard stacking rules: check CheckCanAddToStack() if possible, or just compare Names/IDs/Quality
-                bool exists = this.FullInventory.Any(sItem => 
-                    sItem != null && sItem.canStackWith(pItem));
-                
-                if (exists)
-                {
-                    // Move item to storage
-                    if (Context.IsMainPlayer)
-                    {
-                        StorageManager.AddItem(this.SourceGuid, pItem);
-                        Game1.player.removeItemFromInventory(pItem);
-                        changed = true;
-                    }
-                    else
-                    {
-                        // TODO: Network implementation for fill stacks
-                        // For now, just try to move it
-                        // StorageManager.AddItem won't work for farmhand directly if it writes disk.
-                        // Farmhand needs to send packet.
-                        // NetworkManager.SendTransfer(...);
-                    }
-                }
-            }
+             foreach (var pItem in playerItems.OfType<Item>()
+                          .Select(pItem => new
+                          {
+                              pItem,
+                              exists = _fullInventory.Any(sItem => sItem != null && sItem.canStackWith(pItem))
+                          })
+                          .Where(t => t.exists)
+                          .Where(_ => Context.IsMainPlayer)
+                          .Select(t => t.pItem))
+             {
+                 StorageManager.AddItem(_sourceGuid, pItem);
+                 Game1.player.removeItemFromInventory(pItem);
+                 changed = true;
+             }
 
-            if (changed && Context.IsMainPlayer)
-            {
-                Game1.playSound("Ship");
-                // Refresh
-                 var data = StorageManager.GetInventory(this.SourceGuid);
-                 this.FullInventory = data.Inventory.Values.SelectMany(x => x).Cast<Item?>().ToList();
-                 this.ApplyFilters();
-            }
+             if (!changed || !Context.IsMainPlayer) return;
+             Game1.playSound("Ship");
+             RefreshView();
         }
 
         public override void receiveLeftClick(int x, int y, bool playSound = true)
         {
             base.receiveLeftClick(x, y, playSound);
 
-            if (this.PrevPageButton != null && this.PrevPageButton.containsPoint(x, y))
-            {
-                if (this.CurrentPage > 0)
-                {
-                    this.CurrentPage--;
-                    Game1.playSound("shwip");
-                    this.RefreshView();
-                }
-                return;
-            }
-
-            if (this.NextPageButton != null && this.NextPageButton.containsPoint(x, y))
-            {
-                int totalItems = this.FilteredInventory.Count;
-                int totalPages = (int)Math.Ceiling(totalItems / (double)ItemsPerPage);
-                if (this.CurrentPage < totalPages - 1)
-                {
-                    this.CurrentPage++;
-                    Game1.playSound("shwip");
-                    this.RefreshView();
-                }
-                return;
-            }
-
-            if (this.OkButton != null && this.OkButton.containsPoint(x, y))
+            // Widgets
+            if (this._okButton != null && this._okButton.containsPoint(x, y))
             {
                 this.exitThisMenu();
                 return;
             }
 
-            if (this.FillStacksButton != null && this.FillStacksButton.containsPoint(x, y))
+            if (this._fillStacksButton != null && this._fillStacksButton.containsPoint(x, y))
             {
                 this.FillExistingStacks();
                 return;
             }
-
-
             
+            // Components
+            if (this._pagination.HandleClick(x, y, this._filteredInventory.Count)) return;
+            if (this._sidebar.HandleClick(x, y, this.xPositionOnScreen, this.yPositionOnScreen)) return;
 
-            // Handle Category Tabs (Major)
-            foreach (var tab in this.CategoryTabs)
-            {
-                if (tab.containsPoint(x, y))
-                {
-                    if (this.SelectedGroup != tab.name)
-                    {
-                        this.SelectedGroup = tab.name;
-                        this.SelectedSubCategory = null; 
-                        this.UpdateSubCategories();
-                        this.ApplyFilters(); 
-                        Game1.playSound("smallSelect");
-                    }
-                    return;
-                }
-            }
-
-            // Handle SubCategory Tabs
-            if (this.SelectedGroup != "全部")
-            {
-                foreach (var tab in this.SubCategoryTabs)
-                {
-                    if (tab.containsPoint(x, y))
-                    {
-                        int newSub = tab.myID;
-                        int resolvedCurrent = this.SelectedSubCategory ?? -9999;
-                        
-                        if (resolvedCurrent != newSub)
-                        {
-                            if (newSub == -9999) this.SelectedSubCategory = null;
-                            else this.SelectedSubCategory = newSub;
-                            
-                            this.ApplyFilters();
-                            Game1.playSound("smallSelect");
-                        }
-                        return;
-                    }
-                }
-            }
+            var isShift = (Game1.oldKBState.IsKeyDown(Keys.LeftShift) || Game1.oldKBState.IsKeyDown(Keys.RightShift));
             
-            bool isShift = (Game1.oldKBState.IsKeyDown(Keys.LeftShift) || Game1.oldKBState.IsKeyDown(Keys.RightShift));
-
-            // Handle Storage Inventory clicks
-            Item? clickedItem = this.StorageInventory.getItemAt(x, y);
-            if (clickedItem != null)
-            {
-                if (isShift)
-                {
-                     // Shift + Click: Transfer to Player
-                     if (Game1.player.couldInventoryAcceptThisItem(clickedItem))
-                     {
-                         Game1.player.addItemToInventory(clickedItem);
-                         this.StorageInventory.actualInventory.Remove(clickedItem); // Visual update
-                         
-                         if (Context.IsMainPlayer)
-                         {
-                             StorageManager.RemoveItem(this.SourceGuid, clickedItem);
-                             this.FullInventory.Remove(clickedItem);
-                             this.FilteredInventory.Remove(clickedItem);
-                             // Re-apply filters? Efficiency trade-off. 
-                             // If we remove from filtered list, we should be fine.
-                         }
-                         Game1.playSound("dwop");
-                         this.RefreshView();
-                     }
-                     return;
-                }
-                
-                // Normal Click: Pick up
-                if (this.HeldItem == null)
-                {
-                    this.HeldItem = clickedItem;
-                    this.StorageInventory.actualInventory.Remove(clickedItem);
-                    this.FullInventory.Remove(clickedItem);
-                    this.FilteredInventory.Remove(clickedItem);
-                    
-                    if (Context.IsMainPlayer)
-                    {
-                        StorageManager.RemoveItem(this.SourceGuid, clickedItem);
-                    }
-                    
-                    Game1.playSound("dwop");
-                    this.RefreshView(); 
-                    return;
-                }
-            }
-
-            // Handle Player Inventory clicks
-            Item? playerItem = this.PlayerInventory.getItemAt(x, y);
-            if (playerItem != null)
-            {
-                if (isShift)
-                {
-                    // Shift + Click: Transfer to Storage
-                    if (Context.IsMainPlayer)
-                    {
-                        StorageManager.AddItem(this.SourceGuid, playerItem);
-                        Game1.player.removeItemFromInventory(playerItem);
-                        
-                        // Reload data
-                        var data = StorageManager.GetInventory(this.SourceGuid);
-                        this.FullInventory = data.Inventory.Values.SelectMany(dx => dx).Cast<Item?>().ToList();
-                        this.ApplyFilters();
-                        
-                        Game1.playSound("dwop");
-                    }
-                    return;
-                }
-                
-                // Normal Click: Pick up
-                if (this.HeldItem == null)
-                {
-                    this.HeldItem = playerItem;
-                    Game1.player.removeItemFromInventory(playerItem);
-                    Game1.playSound("dwop");
-                    return;
-                }
-            }
-
-            // Place held item
-            if (this.HeldItem != null)
-            {
-                // Try to place in storage
-                if (this.StorageInventory.isWithinBounds(x, y))
-                {
-                    if (Context.IsMainPlayer)
-                    {
-                        ModEntry.Instance.Monitor.Log($"Attempting to add item: {this.HeldItem.Name} x{this.HeldItem.Stack}", LogLevel.Trace);
-                        StorageManager.AddItem(this.SourceGuid, this.HeldItem);
-                        
-                        // Reload data from StorageManager to avoid duplicates
-                        var data = StorageManager.GetInventory(this.SourceGuid);
-                        this.FullInventory = data.Inventory.Values.SelectMany(x => x).Cast<Item?>().ToList();
-                        
-                        // Re-apply filters to ensure view is consistent
-                        // Note: ApplyFilters resets page to 0. 
-                        // If we are on page 5 and add an item, we jump to page 0? That's annoying.
-                        // We should try to stay on page.
-                        
-                        // 1. Filter by Category
-                        IEnumerable<Item?> items = this.FullInventory;
-                        if (this.SelectedGroup != "全部")
-                        {
-                             items = items.Where(item => Data.CategoryData.IsItemInGroup(item, this.SelectedGroup));
-                             if (this.SelectedSubCategory.HasValue && this.SelectedSubCategory.Value != -9999)
-                             {
-                                 items = items.Where(item => item != null && item.Category == this.SelectedSubCategory.Value);
-                             }
-                        }
-                        string query = this.SearchBar?.Text?.Trim() ?? "";
-                        if (!string.IsNullOrEmpty(query)) items = items.Where(item => item != null && item.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
-                        this.FilteredInventory = items.ToList();
-                        
-                        // Don't call ApplyFilters() because it resets page.
-                    }
-
-                    if (this.HeldItem.Stack <= 0)
-                    {
-                        ModEntry.Instance.Monitor.Log("Item fully consumed.", LogLevel.Trace);
-                        this.HeldItem = null;
-                        Game1.playSound("stoneStep");
-                    }
-                    else
-                    {
-                        // Item was not fully added (capacity full)
-                        ModEntry.Instance.Monitor.Log("Storage Full - Item rejected/returned.", LogLevel.Warn);
-                        Game1.playSound("cancel");
-                        Game1.addHUDMessage(new HUDMessage("Storage Full", 3));
-                    }
-                    
-                    this.RefreshView();
-                    return;
-                }
-
-                // Try to place in player inventory
-                if (this.PlayerInventory.isWithinBounds(x, y))
-                {
-                    Game1.player.addItemToInventory(this.HeldItem);
-                    this.HeldItem = null;
-                    Game1.playSound("stoneStep");
-                    return;
-                }
-            }
+            // Inventory Handler
+            this._inventoryHandler.HandleLeftClick(x, y, isShift);
         }
 
         public override void receiveRightClick(int x, int y, bool playSound = true)
         {
-            // Do NOT call base.base... because we want to override default logic
-            // base.receiveRightClick(x, y, playSound); 
-            
-            // Check Widgets first
-            if (this.PrevPageButton != null && this.PrevPageButton.containsPoint(x, y)) { this.receiveLeftClick(x, y, playSound); return; }
-            if (this.NextPageButton != null && this.NextPageButton.containsPoint(x, y)) { this.receiveLeftClick(x, y, playSound); return; }
+            if (this._pagination.HandleClick(x, y, this._filteredInventory.Count)) return; // Treating right click on page buttons as click? Usually no, but safe.
 
-            // Storage Logic: Take One
-            Item? storageItem = this.StorageInventory.getItemAt(x, y);
-            if (storageItem != null)
-            {
-                // If holding nothing -> Take one
-                if (this.HeldItem == null)
-                {
-                    Item single = storageItem.getOne();
-                    this.HeldItem = single;
-                    
-                    // Reduce stack in storage
-                     storageItem.Stack--;
-                     if (storageItem.Stack <= 0)
-                     {
-                         this.StorageInventory.actualInventory.Remove(storageItem);
-                         this.FullInventory.Remove(storageItem);
-                         if (Context.IsMainPlayer) StorageManager.RemoveItem(this.SourceGuid, storageItem);
-                     }
-                     else
-                     {
-                         // Just update count
-                         // NOTE: StorageManager might need explicit update if it syncs by reference?
-                         // If 'storageItem' is a reference to the object in StorageManager's dictionary, we are good.
-                         // But we should verify. 
-                         // To be safe, we trigger a "save" or assumed reference.
-                     }
-                     
-                     // Optimization: If stack > 0, we don't strictly need to RemoveItem. 
-                     // But we should ensure the backend knows the count changed if it tracks "total items".
-                     // Ideally StorageManager handles the item object reference.
-                     Game1.playSound("dwop");
-                     this.RefreshView(); // Update counts
-                     return;
-                }
-                else
-                {
-                    // If holding something -> Place one IF matches
-                    if (this.HeldItem.canStackWith(storageItem))
-                    {
-                        // Standard chest: Right click reduces held stack by one, puts into chest
-                        // Wait, Standard Right Click on Chest Item:
-                        // 1. Holding Nothing + Right Click Chest Item = Take One.
-                        // 2. Holding X + Right Click Chest Same Item = Place One.
-                        
-                        if (Context.IsMainPlayer)
-                        {
-                            Item one = this.HeldItem.getOne();
-                            this.HeldItem.Stack--;
-                            if (this.HeldItem.Stack <= 0) this.HeldItem = null;
-                            
-                            StorageManager.AddItem(this.SourceGuid, one);
-                             
-                             // Update view
-                             // To avoid full reload flickering, we can try to find the item object and increment?
-                             // But StorageManager.AddItem handles merging. 
-                             // So we reload.
-                             var data = StorageManager.GetInventory(this.SourceGuid);
-                             this.FullInventory = data.Inventory.Values.SelectMany(i => i).Cast<Item?>().ToList();
-                             this.ApplyFilters();
-                             
-                             Game1.playSound("dwop");
-                        }
-                        return;
-                    }
-                }
-            }
-            // Storage Logic: Place One in Empty Slot
-            else if (this.StorageInventory.isWithinBounds(x, y))
-            {
-                if (this.HeldItem != null)
-                {
-                    // Place one into new slot logic?
-                    // "Singularity" storage doesn't really have "slots". It's a pool.
-                    // Doing "Place One" into empty area just calls AddItem(One).
-                    if (Context.IsMainPlayer)
-                    {
-                        Item one = this.HeldItem.getOne();
-                        this.HeldItem.Stack--;
-                        if (this.HeldItem.Stack <= 0) this.HeldItem = null;
-                        
-                        StorageManager.AddItem(this.SourceGuid, one);
-                        
-                        // Reload
-                         var data = StorageManager.GetInventory(this.SourceGuid);
-                         this.FullInventory = data.Inventory.Values.SelectMany(i => i).Cast<Item?>().ToList();
-                         this.ApplyFilters();
-                         
-                         Game1.playSound("dwop");
-                    }
-                    return;
-                }
-            }
-
-            // Player Inventory Logic: Split / Place One
-            Item? playerItem = this.PlayerInventory.getItemAt(x, y);
-            if (playerItem != null)
-            {
-                // Holding Nothing + Right Click Player Item = Take One (or Split?)
-                // Vanilla inventory Right Click on item = Take One.
-                 if (this.HeldItem == null)
-                 {
-                     Item single = playerItem.getOne();
-                     this.HeldItem = single;
-                     playerItem.Stack--;
-                     if (playerItem.Stack <= 0) Game1.player.removeItemFromInventory(playerItem);
-                     Game1.playSound("dwop");
-                 }
-                 else
-                 {
-                     // Holding X + Right Click Same Item = Place One.
-                     if (this.HeldItem.canStackWith(playerItem))
-                     {
-                         if (playerItem.getRemainingStackSpace() > 0)
-                         {
-                             playerItem.Stack++;
-                             this.HeldItem.Stack--;
-                             if (this.HeldItem.Stack <= 0) this.HeldItem = null;
-                             Game1.playSound("dwop");
-                         }
-                     }
-                 }
-                 return;
-            }
-            else if (this.PlayerInventory.isWithinBounds(x, y))
-            {
-                // Place One into empty slot
-                if (this.HeldItem != null)
-                {
-                    // Find actual slot
-                   int slot = this.PlayerInventory.getInventoryPositionOfClick(x, y);
-                   if (slot != -1)
-                   {
-                        // Add one to that slot? 
-                        // Vanilla `utility.addItemToInventory` logic is complex.
-                        // Simplified: Create new item of 1.
-                        Item one = this.HeldItem.getOne();
-                        Game1.player.addItemToInventory(one, slot);
-                         this.HeldItem.Stack--;
-                        if (this.HeldItem.Stack <= 0) this.HeldItem = null;
-                        Game1.playSound("dwop");
-                   }
-                }
-            }
+            if (this._inventoryHandler.HandleRightClick(x, y)) return;
         }
 
         public override void performHoverAction(int x, int y)
         {
             base.performHoverAction(x, y);
             
-            this.HoverItem = this.StorageInventory.hover(x, y, null);
-            if (this.HoverItem == null)
-                this.HoverItem = this.PlayerInventory.hover(x, y, null);
+            this._hoverItem = this._inventoryHandler.CheckForHover(x, y);
 
-            if (this.PrevPageButton != null)
-                this.PrevPageButton.tryHover(x, y);
-            if (this.NextPageButton != null)
-                this.NextPageButton.tryHover(x, y);
-            if (this.OkButton != null)
-                this.OkButton.tryHover(x, y);
-            if (this.FillStacksButton != null)
-                this.FillStacksButton.tryHover(x, y);
+            this._pagination.PerformHover(x, y);
+            
+            this._okButton?.tryHover(x, y);
+            this._fillStacksButton?.tryHover(x, y);
         }
 
         public override void update(GameTime time)
@@ -805,49 +346,19 @@ namespace SingularityStorage.UI
             // Draw fade overlay
             b.Draw(Game1.fadeToBlackRect, new Rectangle(0, 0, Game1.uiViewport.Width, Game1.uiViewport.Height), Color.Black * 0.5f);
 
-            // Draw Major Tabs
-            foreach (var tab in this.CategoryTabs)
-            {
-                 bool selected = (tab.name == this.SelectedGroup);
-                 IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(16, 368, 16, 16), 
-                     tab.bounds.X, tab.bounds.Y, tab.bounds.Width, tab.bounds.Height, 
-                     selected ? Color.White : Color.Gray, 4f, false); // Gray out unselected? Or keep white.
-                 
-                 Vector2 textSize = Game1.smallFont.MeasureString(tab.name);
-                 Vector2 textPos = new Vector2(
-                    tab.bounds.X + (tab.bounds.Width - textSize.X) / 2, 
-                    tab.bounds.Y + (tab.bounds.Height - textSize.Y) / 2 + 4);
-                 b.DrawString(Game1.smallFont, tab.name, textPos, Game1.textColor);
-            }
+            // Draw Sidebar
+            this._sidebar.Draw(b);
             
-            // Draw Sub Tabs
-            if (this.SelectedGroup != "全部")
-            {
-                foreach (var tab in this.SubCategoryTabs)
-                {
-                     bool selected = (this.SelectedSubCategory == null && tab.myID == -9999) || (this.SelectedSubCategory == tab.myID);
-                     IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(16, 368, 16, 16), 
-                         tab.bounds.X, tab.bounds.Y, tab.bounds.Width, tab.bounds.Height, 
-                         selected ? Color.White : Color.Gray * 0.9f, 4f, false);
-                         
-                     Vector2 textSize = Game1.smallFont.MeasureString(tab.name);
-                     Vector2 textPos = new Vector2(
-                        tab.bounds.X + (tab.bounds.Width - textSize.X) / 2, 
-                        tab.bounds.Y + (tab.bounds.Height - textSize.Y) / 2 + 4);
-                     b.DrawString(Game1.smallFont, tab.name, textPos, Game1.textColor);
-                }
-            }
-
             // Draw main menu background
             Game1.drawDialogueBox(this.xPositionOnScreen, this.yPositionOnScreen, this.width, this.height, false, true);
 
-            // Draw title from config
-            string title = Config.Title.Text;
+            // Draw title
+            var title = Config.Title.Text;
             Utility.drawTextWithShadow(b, title, Game1.dialogueFont, 
                 new Vector2(this.xPositionOnScreen + (this.width - Game1.dialogueFont.MeasureString(title).X) / 2, this.yPositionOnScreen + Config.Title.OffsetY), 
                 Game1.textColor);
 
-            // Draw header background from config
+            // Draw header background
             IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(384, 373, 18, 18),
                 this.xPositionOnScreen + Config.Header.Padding, 
                 this.yPositionOnScreen + Config.Header.OffsetY, 
@@ -856,102 +367,84 @@ namespace SingularityStorage.UI
                 Color.White, 4f, false);
 
             // Draw widgets
-            this.SearchBar?.Draw(b);
-            // Draw placeholder from config
-            if (this.SearchBar != null && string.IsNullOrEmpty(this.SearchBar.Text) && !this.SearchBar.Selected)
+            this._searchBar?.Draw(b);
+            if (this._searchBar != null && string.IsNullOrEmpty(this._searchBar.Text) && !this._searchBar.Selected)
             {
-                 b.DrawString(Game1.smallFont, Config.SearchBar.Placeholder, new Vector2(this.SearchBar.X + 10, this.SearchBar.Y + 8), Color.Gray);
+                 b.DrawString(Game1.smallFont, Config.SearchBar.Placeholder, new Vector2(this._searchBar.X + 10, this._searchBar.Y + 8), Color.Gray);
             }
 
-            this.PrevPageButton?.draw(b);
-            this.NextPageButton?.draw(b);
-
-            // Draw page number
-            if (this.PrevPageButton != null)
-            {
-                int totalPages = (int)Math.Ceiling(this.FilteredInventory.Count / (double)ItemsPerPage);
-                if (totalPages == 0) totalPages = 1;
-                string pageText = $"{this.CurrentPage + 1}/{totalPages}";
-                Vector2 textSize = Game1.smallFont.MeasureString(pageText);
-                float btnCenter = (this.PrevPageButton.bounds.Right + this.NextPageButton!.bounds.Left) / 2f;
-                Utility.drawTextWithShadow(b, pageText, Game1.smallFont,
-                    new Vector2(btnCenter - textSize.X / 2, this.PrevPageButton.bounds.Y + 12), Game1.textColor);
-            }
+            // Draw Pagination
+            this._pagination.Draw(b, this._filteredInventory.Count);
 
             // Draw storage inventory
-            this.StorageInventory.draw(b);
+            this._storageInventory.draw(b);
 
-            // Draw separator from config
+            // Draw separator
             IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(384, 373, 18, 18),
                 this.xPositionOnScreen + Config.Header.Padding, 
-                this.PlayerInventory.yPositionOnScreen - Config.Separator.OffsetFromInventory, 
+                this._playerInventory.yPositionOnScreen - Config.Separator.OffsetFromInventory, 
                 this.width - (Config.Header.Padding * 2), 
                 Config.Separator.Height, 
                 Color.White, 4f, false);
 
             // Draw player inventory
-            this.PlayerInventory.draw(b);
+            this._playerInventory.draw(b);
 
             // Draw OK button
-            this.OkButton?.draw(b);
+            this._okButton?.draw(b);
 
-            // Draw Fill Stacks button (Text version for visibility)
-            if (this.FillStacksButton != null)
+            // Draw Fill Stacks button
+            if (this._fillStacksButton != null)
             {
-                // Draw button background
-                bool isHovered = this.FillStacksButton.containsPoint(Game1.getOldMouseX(), Game1.getOldMouseY());
-                Color bgColor = isHovered ? Color.Wheat : Color.White;
+                var isHovered = this._fillStacksButton.containsPoint(Game1.getOldMouseX(), Game1.getOldMouseY());
+                var bgColor = isHovered ? Color.Wheat : Color.White;
                 
                 IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(384, 373, 18, 18),
-                    this.FillStacksButton.bounds.X, this.FillStacksButton.bounds.Y,
-                    this.FillStacksButton.bounds.Width, this.FillStacksButton.bounds.Height,
+                    this._fillStacksButton.bounds.X, this._fillStacksButton.bounds.Y,
+                    this._fillStacksButton.bounds.Width, this._fillStacksButton.bounds.Height,
                     bgColor, 4f, false);
                 
-                // Draw text
-                string buttonText = "填充";
-                Vector2 textSize = Game1.smallFont.MeasureString(buttonText);
-                Vector2 textPos = new Vector2(
-                    this.FillStacksButton.bounds.X + (this.FillStacksButton.bounds.Width - textSize.X) / 2,
-                    this.FillStacksButton.bounds.Y + (this.FillStacksButton.bounds.Height - textSize.Y) / 2);
+                var buttonText = "填充";
+                var textSize = Game1.smallFont.MeasureString(buttonText);
+                var textPos = new Vector2(
+                    this._fillStacksButton.bounds.X + (this._fillStacksButton.bounds.Width - textSize.X) / 2,
+                    this._fillStacksButton.bounds.Y + (this._fillStacksButton.bounds.Height - textSize.Y) / 2);
                 
                 Utility.drawTextWithShadow(b, buttonText, Game1.smallFont, textPos, Game1.textColor);
                 
-                // Draw tooltip if hovered
                 if (isHovered)
                 {
                     IClickableMenu.drawToolTip(b, "将背包中已存在于箱子的物品全部存入", "填充堆叠", null);
                 }
             }
 
-
-
             // Draw Capacity
-            if (!string.IsNullOrEmpty(this.CachedCapacityText))
+            if (!string.IsNullOrEmpty(this._cachedCapacityText))
             {
-                 Vector2 capSize = Game1.smallFont.MeasureString(this.CachedCapacityText);
-                 Utility.drawTextWithShadow(b, this.CachedCapacityText, Game1.smallFont,
-                     new Vector2(this.StorageInventory.xPositionOnScreen + this.StorageInventory.width - capSize.X, 
-                                 this.StorageInventory.yPositionOnScreen + this.StorageInventory.height + 4), 
+                 var capSize = Game1.smallFont.MeasureString(this._cachedCapacityText);
+                 Utility.drawTextWithShadow(b, this._cachedCapacityText, Game1.smallFont,
+                     new Vector2(this._storageInventory.xPositionOnScreen + this._storageInventory.width - capSize.X, 
+                                 this._storageInventory.yPositionOnScreen + this._storageInventory.height + 4), 
                      Color.White);
             }
 
             // Draw held item
-            if (this.HeldItem != null)
+            if (this._inventoryHandler.HeldItem != null)
             {
-                this.HeldItem.drawInMenu(b, new Vector2(Game1.getOldMouseX() + 8, Game1.getOldMouseY() + 8), 1f);
+                this._inventoryHandler.HeldItem.drawInMenu(b, new Vector2(Game1.getOldMouseX() + 8, Game1.getOldMouseY() + 8), 1f);
             }
 
             // Draw hover text
-            if (this.HoverItem != null && this.HeldItem == null)
+            if (this._hoverItem != null && this._inventoryHandler.HeldItem == null)
             {
-                IClickableMenu.drawToolTip(b, this.HoverItem.getDescription(), this.HoverItem.DisplayName, this.HoverItem);
+                IClickableMenu.drawToolTip(b, this._hoverItem.getDescription(), this._hoverItem.DisplayName, this._hoverItem);
             }
 
-            // Draw loading text from config
-            if (this.IsLoading)
+            // Draw loading text
+            if (this._isLoading)
             {
                 Utility.drawTextWithShadow(b, Config.LoadingText.Text, Game1.smallFont,
-                    new Vector2(this.StorageInventory.xPositionOnScreen, this.StorageInventory.yPositionOnScreen + Config.LoadingText.OffsetY), Color.Yellow);
+                    new Vector2(this._storageInventory.xPositionOnScreen, this._storageInventory.yPositionOnScreen + Config.LoadingText.OffsetY), Color.Yellow);
             }
 
             // Draw cursor
@@ -962,7 +455,6 @@ namespace SingularityStorage.UI
         {
             base.gameWindowSizeChanged(oldBounds, newBounds);
             
-            // Recalculate positions from config
             this.xPositionOnScreen = (Game1.uiViewport.Width - Config.MenuDimensions.Width) / 2;
             this.yPositionOnScreen = (Game1.uiViewport.Height - Config.MenuDimensions.Height) / 2;
             
@@ -971,31 +463,17 @@ namespace SingularityStorage.UI
 
         protected override void cleanupBeforeExit()
         {
-            if (this.HeldItem != null)
-            {
-                // Try to return to inventory
-                if (Game1.player.couldInventoryAcceptThisItem(this.HeldItem))
-                {
-                    Game1.player.addItemToInventory(this.HeldItem);
-                }
-                else
-                {
-                    // Inventory full, drop on ground
-                    Game1.createItemDebris(this.HeldItem, Game1.player.getStandingPosition(), Game1.player.FacingDirection);
-                }
-                this.HeldItem = null;
-            }
-            
+            this._inventoryHandler.ReturnHeldItem();
             base.cleanupBeforeExit();
         }
 
         public void UpdateFromNetwork(NetworkPacket packet)
         {
-            if (packet.SourceGuid != this.SourceGuid) return;
+            if (packet.SourceGuid != this._sourceGuid) return;
             
             var pageItems = packet.Items ?? new List<Item?>();
-            this.StorageInventory.actualInventory = pageItems.Cast<Item>().ToList();
-            this.IsLoading = false;
+            this._storageInventory.actualInventory = pageItems.Cast<Item>().ToList();
+            this._isLoading = false;
         }
     }
 }

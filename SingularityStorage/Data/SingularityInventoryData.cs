@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.IO;
 using System.Runtime.Serialization;
 using System.Xml.Serialization;
 using Newtonsoft.Json;
@@ -14,7 +12,7 @@ namespace SingularityStorage.Data
     public class SingularityInventoryData
     {
         /// <summary>The unique ID of this storage unit.</summary>
-        public string GUID { get; set; } = string.Empty;
+        public string Guid { get; set; } = string.Empty;
 
         /// <summary>
         /// The maximum number of items (not stacks) that can be stored.
@@ -41,7 +39,7 @@ namespace SingularityStorage.Data
 
         public SingularityInventoryData(string guid)
         {
-            this.GUID = guid;
+            this.Guid = guid;
         }
 
         [OnSerializing]
@@ -49,19 +47,16 @@ namespace SingularityStorage.Data
         {
             this.SerializedInventory = new Dictionary<string, List<string>>();
             // Use standard XmlSerializer for Item
-            XmlSerializer serializer = new XmlSerializer(typeof(Item));
+            var serializer = new XmlSerializer(typeof(Item));
 
             foreach (var kvp in this.Inventory)
             {
                 var xmlList = new List<string>();
                 foreach (var item in kvp.Value)
                 {
-                    if (item == null) continue;
-                    using (StringWriter writer = new StringWriter())
-                    {
-                        serializer.Serialize(writer, item);
-                        xmlList.Add(writer.ToString());
-                    }
+                    using var writer = new StringWriter();
+                    serializer.Serialize(writer, item);
+                    xmlList.Add(writer.ToString());
                 }
                 this.SerializedInventory[kvp.Key] = xmlList;
             }
@@ -71,35 +66,30 @@ namespace SingularityStorage.Data
         internal void OnDeserialized(StreamingContext context)
         {
             this.Inventory = new Dictionary<string, List<Item>>();
-            XmlSerializer serializer = new XmlSerializer(typeof(Item));
+            var serializer = new XmlSerializer(typeof(Item));
 
-            if (this.SerializedInventory != null)
+            foreach (var kvp in this.SerializedInventory)
             {
-                foreach (var kvp in this.SerializedInventory)
+                var itemList = new List<Item>();
+                foreach (var xml in kvp.Value)
                 {
-                    var itemList = new List<Item>();
-                    foreach (var xml in kvp.Value)
+                    try
                     {
-                        try
+                        using var reader = new StringReader(xml);
+                        var item = (Item?)serializer.Deserialize(reader);
+                        if (item != null)
                         {
-                            using (StringReader reader = new StringReader(xml))
-                            {
-                                Item? item = (Item?)serializer.Deserialize(reader);
-                                if (item != null)
-                                {
-                                    // Fix stack size or other transient properties if needed
-                                    // item.fixStackSize(); 
-                                    itemList.Add(item);
-                                }
-                            }
-                        }
-                        catch
-                        {
-                            // Ignore corrupted items
+                            // Fix stack size or other transient properties if needed
+                            // item.fixStackSize(); 
+                            itemList.Add(item);
                         }
                     }
-                    this.Inventory[kvp.Key] = itemList;
+                    catch
+                    {
+                        // Ignore corrupted items
+                    }
                 }
+                this.Inventory[kvp.Key] = itemList;
             }
         }
     }

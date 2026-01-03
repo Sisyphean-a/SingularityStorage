@@ -1,5 +1,3 @@
-using System;
-using Microsoft.Xna.Framework;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
@@ -9,8 +7,8 @@ namespace SingularityStorage
 {
     public class InteractionHandler
     {
-        private readonly IMonitor Monitor;
-        private readonly IModHelper Helper;
+        private readonly IMonitor _monitor;
+        private readonly IModHelper _helper;
         
         // Define the Qualified Item ID for our custom object.
         // Format: (BC)ModID_ItemId
@@ -18,8 +16,8 @@ namespace SingularityStorage
 
         public InteractionHandler(IModHelper helper, IMonitor monitor)
         {
-            this.Helper = helper;
-            this.Monitor = monitor;
+            this._helper = helper;
+            this._monitor = monitor;
 
             helper.Events.Input.ButtonPressed += this.OnButtonPressed;
         }
@@ -31,9 +29,9 @@ namespace SingularityStorage
             // Only handle right-clicks (Check actions)
             if (!e.Button.IsActionButton()) return;
 
-            Vector2 clickedTile = e.Cursor.Tile;
+            var clickedTile = e.Cursor.Tile;
             // Check if there is an object at the clicked tile
-            if (Game1.currentLocation.Objects.TryGetValue(clickedTile, out StardewValley.Object obj))
+            if (Game1.currentLocation.Objects.TryGetValue(clickedTile, out var obj))
             {
                 // In 1.6, we check QualifiedItemId
                 // Since CP uses the ModId as prefix, we need to match what we put in content.json
@@ -41,7 +39,7 @@ namespace SingularityStorage
                 if (obj.QualifiedItemId == SingularityChestId || obj.ItemId == "Singularity.Storage_SingularityChest")
                 {
                     // Suppress default action (which might be just playing a sound or shaking)
-                    this.Helper.Input.Suppress(e.Button);
+                    this._helper.Input.Suppress(e.Button);
 
                     // Check for upgrade item
                     if (this.HandleUpgrade(obj, Game1.player.CurrentItem))
@@ -59,7 +57,7 @@ namespace SingularityStorage
             if (item == null) return false;
             
             // Define upgrade amounts
-            int increment = 0;
+            var increment = 0;
             if (item.ItemId == "Singularity.Storage_T1_Comp") increment = 36;
             else if (item.ItemId == "Singularity.Storage_T2_Comp") increment = 100;
             else if (item.ItemId == "Singularity.Storage_T3_Comp") increment = 999;
@@ -72,7 +70,7 @@ namespace SingularityStorage
                     chest.modData["SingularityData_GUID"] = Guid.NewGuid().ToString();
                 }
 
-                string guid = chest.modData["SingularityData_GUID"];
+                var guid = chest.modData["SingularityData_GUID"];
                 
                 // Perform upgrade
                 StorageManager.UpgradeCapacity(guid, increment);
@@ -98,9 +96,9 @@ namespace SingularityStorage
                 chestObj.modData["SingularityData_GUID"] = Guid.NewGuid().ToString();
             }
 
-            string guid = chestObj.modData["SingularityData_GUID"];
+            var guid = chestObj.modData["SingularityData_GUID"];
             
-            this.Monitor.Log($"Opening Singularity Storage: {guid}", LogLevel.Debug);
+            this._monitor.Log($"Opening Singularity Storage: {guid}", LogLevel.Debug);
             
             // Open the UI
             Game1.activeClickableMenu = new SingularityMenu(guid);

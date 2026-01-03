@@ -1,5 +1,3 @@
-using System;
-using System.IO;
 using Newtonsoft.Json;
 
 namespace SingularityStorage.UI
@@ -30,7 +28,7 @@ namespace SingularityStorage.UI
             {
                 if (File.Exists(configPath))
                 {
-                    string json = File.ReadAllText(configPath);
+                    var json = File.ReadAllText(configPath);
                     return JsonConvert.DeserializeObject<MenuConfig>(json) ?? new MenuConfig();
                 }
             }

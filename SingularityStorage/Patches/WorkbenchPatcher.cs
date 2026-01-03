@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using HarmonyLib;
 using StardewValley;
@@ -68,13 +65,13 @@ namespace SingularityStorage.Patches
                     if (obj.QualifiedItemId == "(BC)Singularity.Storage_SingularityChest" || 
                         obj.ItemId == "Singularity.Storage_SingularityChest")
                     {
-                        if (obj.modData.TryGetValue("SingularityData_GUID", out string guid))
+                        if (obj.modData.TryGetValue("SingularityData_GUID", out var guid))
                         {
                             // 获取虚拟存储中的物品
                             var items = StorageManager.GetAllItems(guid);
                             
                             // 创建代理箱子
-                            Chest proxy = new Chest(true);
+                            var proxy = new Chest(true);
                             
                             // 将物品添加到代理箱子（暂时注释，等待实现同步逻辑）
                             // proxy.Items.AddRange(items);
