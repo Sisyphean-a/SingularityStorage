@@ -46,7 +46,7 @@ namespace SingularityStorage.Network
             else if (e.Type == "RespondView" && !Context.IsMainPlayer)
             {
                 var packet = e.ReadAs<NetworkPacket>();
-                // Access UI if open
+                // 如果 UI 已打开，则访问它
                 if (Game1.activeClickableMenu is UI.SingularityMenu menu)
                 {
                      menu.UpdateFromNetwork(packet); 
@@ -58,18 +58,18 @@ namespace SingularityStorage.Network
         {
             if (packet.SourceGuid == null) return;
 
-            // Host logic: read storage, filter, slice, send back
+            // 主机逻辑：读取存储、过滤、切片并传回
             var data = StorageManager.GetInventory(packet.SourceGuid);
             var allItems = data.Inventory.Values.SelectMany(x => x).ToList();
             
-            // Filter
+            // 过滤
             if (!string.IsNullOrEmpty(packet.SearchQuery))
             {
                 allItems = allItems.Where(i => i.DisplayName.Contains(packet.SearchQuery, StringComparison.OrdinalIgnoreCase)).ToList();
             }
             
             var totalItems = allItems.Count;
-            // Slice
+            // 切片 (分页)
             var skip = packet.PageIndex * 36;
             var pageItems = allItems.Skip(skip).Take(36).Cast<Item?>().ToList();
             

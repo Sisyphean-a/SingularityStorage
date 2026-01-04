@@ -5,14 +5,14 @@ using SingularityStorage.Data;
 namespace SingularityStorage
 {
     /// <summary>
-    /// Manages the loading, saving, and access to external inventory files.
+    /// 管理外部库存文件的加载、保存和访问。
     /// </summary>
     public static class StorageManager
     {
         private static IMonitor? _monitor;
         private static IDataHelper? _dataHelper;
         
-        // Cache: GUID -> InventoryData
+        // 缓存：GUID -> InventoryData
         private static readonly Dictionary<string, SingularityInventoryData> LoadedInventories = new();
 
         public static void Initialize(IMonitor monitor, IDataHelper dataHelper)
@@ -22,7 +22,7 @@ namespace SingularityStorage
         }
 
         /// <summary>
-        /// Gets the inventory data for a specific GUID. Loads from disk if necessary.
+        /// 获取特定 GUID 的库存数据。如果需要，从磁盘加载。
         /// </summary>
         public static SingularityInventoryData GetInventory(string guid)
         {
@@ -34,7 +34,7 @@ namespace SingularityStorage
                 return data;
             }
 
-            // Try load from file
+            // 尝试从文件加载
             var filename = $"SingularityInventory_{guid}.json";
             data = _dataHelper!.ReadJsonFile<SingularityInventoryData>($"SaveData/{filename}") ?? new SingularityInventoryData(guid);
             
@@ -43,9 +43,9 @@ namespace SingularityStorage
         }
 
         /// <summary>
-        /// Adds an item to the storage.
+        /// 向存储中添加物品。
         /// </summary>
-        /// <returns>True if the item was fully or partially added; false if rejected due to capacity.</returns>
+        /// <returns>如果物品已全部或部分添加则返回 true；如果由于容量不足而被拒绝则返回 false。</returns>
         public static bool AddItem(string guid, Item? item)
         {
             if (item == null || item.Stack <= 0) return false;
@@ -61,7 +61,7 @@ namespace SingularityStorage
             var stackList = data.Inventory[key];
             var added = false;
 
-            // 1. Try to merge with existing stacks (doesn't increase slot usage)
+            // 1. 尝试与现有堆叠合并（不增加槽位占用）
             foreach (var existing in stackList)
             {
                 if (!existing.canStackWith(item)) continue;
@@ -77,24 +77,24 @@ namespace SingularityStorage
                 }
             }
 
-            // 2. If we still have items to add, we need a new slot.
+            // 2. 如果仍有物品需要添加，我们需要一个新的槽位。
             if (item.Stack <= 0) return added;
-            // Check Capacity
+            // 检查容量
             var currentUsedSlots = data.Inventory.Values.Sum(list => list.Count);
             if (currentUsedSlots >= data.MaxCapacity)
             {
-                _monitor?.Log($"Add Item Rejected: Storage Full ({currentUsedSlots}/{data.MaxCapacity})", LogLevel.Warn);
+                _monitor?.Log($"物品添加被拒绝：存储已满 ({currentUsedSlots}/{data.MaxCapacity})", LogLevel.Warn);
                 return added;
             }
 
-            _monitor?.Log($"Adding new stack: {item.Name} x{item.Stack}", LogLevel.Trace);
+            _monitor?.Log($"添加新堆叠：{item.Name} x{item.Stack}", LogLevel.Trace);
                 
-            // Copy the item to storage
+            // 将物品复制到存储
             var storedItem = item.getOne();
             storedItem.Stack = item.Stack;
             stackList.Add(storedItem);
                 
-            // Mark input item as fully consumed
+            // 标记输入物品已被完全消耗
             item.Stack = 0;
             added = true;
 
@@ -102,7 +102,7 @@ namespace SingularityStorage
         }
 
         /// <summary>
-        /// Manually upgrades the capacity of the storage.
+        /// 手动升级存储容量。
         /// </summary>
         public static void UpgradeCapacity(string guid, int increment)
         {
@@ -112,7 +112,7 @@ namespace SingularityStorage
         }
 
         /// <summary>
-        /// Returns (UsedSlots, MaxCapacity)
+        /// 返回 (已用槽位, 最大容量)
         /// </summary>
         public static (int Used, int Max) GetCounts(string guid)
         {
@@ -137,7 +137,7 @@ namespace SingularityStorage
             var stackList = data.Inventory[key];
             stackList.Remove(item);
 
-            // Clean up empty lists
+            // 清理空列表
             if (stackList.Count == 0)
             {
                 data.Inventory.Remove(key);
@@ -145,13 +145,13 @@ namespace SingularityStorage
         }
 
         /// <summary>
-        /// Saves all loaded inventories to disk. Should be called on GameLoop.Saving.
+        /// 将所有加载的库存保存到磁盘。应在 GameLoop.Saving 时调用。
         /// </summary>
         public static void SaveAll()
         {
             if (_dataHelper == null) return;
 
-            _monitor?.Log($"Saving {LoadedInventories.Count} external inventories...", LogLevel.Info);
+            _monitor?.Log($"正在保存 {LoadedInventories.Count} 个外部库存...", LogLevel.Info);
 
             foreach (var kvp in LoadedInventories)
             {
@@ -161,7 +161,7 @@ namespace SingularityStorage
         }
         
         /// <summary>
-        /// Clears cache. Should be called on SaveLoaded / ReturnToTitle.
+        /// 清除缓存。应在 SaveLoaded / ReturnToTitle 时调用。
         /// </summary>
         public static void ClearCache()
         {
@@ -169,8 +169,8 @@ namespace SingularityStorage
         }
         
         /// <summary>
-        /// Returns a flattened list of all items for UI display.
-        /// This is expensive and should be cached or paginated in the future.
+        /// 返回一个平铺的所有物品列表，用于 UI 显示。
+        /// 此操作开销较大，将来应进行缓存或分页。
         /// </summary>
         public static IList<Item> GetAllItems(string guid)
         {

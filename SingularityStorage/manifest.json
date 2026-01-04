@@ -2,7 +2,7 @@
   "Name": "Singularity Storage",
   "Author": "xiakn",
   "Version": "1.0.0",
-  "Description": "A high-performance storage mod inspired by Refined Storage and Magic Storage, featuring virtualization and infinite capacity.",
+  "Description": "一款受 Refined Storage 和 Magic Storage 启发的高性能存储 Mod。具有虚拟化存储和无限容量的特点。",
   "UniqueID": "Singularity.Storage",
   "EntryDll": "SingularityStorage.dll",
   "MinimumApiVersion": "4.0.0",

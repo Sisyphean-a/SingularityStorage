@@ -10,8 +10,8 @@ namespace SingularityStorage
         private readonly IMonitor _monitor;
         private readonly IModHelper _helper;
         
-        // Define the Qualified Item ID for our custom object.
-        // Format: (BC)ModID_ItemId
+        // 定义自定义对象的限定物品 ID。
+        // 格式：(BC)ModID_ItemId
         private const string SingularityChestId = "(BC)Singularity.Storage_SingularityChest";
 
         public InteractionHandler(IModHelper helper, IMonitor monitor)
@@ -26,22 +26,22 @@ namespace SingularityStorage
         {
             if (!Context.IsWorldReady) return;
 
-            // Only handle right-clicks (Check actions)
+            // 仅处理右键点击（检查动作）
             if (!e.Button.IsActionButton()) return;
 
             var clickedTile = e.Cursor.Tile;
-            // Check if there is an object at the clicked tile
+            // 检查点击的瓷砖处是否有对象
             if (Game1.currentLocation.Objects.TryGetValue(clickedTile, out var obj))
             {
-                // In 1.6, we check QualifiedItemId
-                // Since CP uses the ModId as prefix, we need to match what we put in content.json
-                // manifest.json ID is "Singularity.Storage", content.json uses {{ModId}}_SingularityChest
+                // 在 1.6 中，我们检查 QualifiedItemId
+                // 由于 CP 使用 ModId 作为前缀，我们需要匹配 content.json 中的内容
+                // manifest.json 的 ID 是 "Singularity.Storage"，content.json 使用 {{ModId}}_SingularityChest
                 if (obj.QualifiedItemId == SingularityChestId || obj.ItemId == "Singularity.Storage_SingularityChest")
                 {
-                    // Suppress default action (which might be just playing a sound or shaking)
+                    // 抑制默认动作（可能只是播放声音或晃动）
                     this._helper.Input.Suppress(e.Button);
 
-                    // Check for upgrade item
+                    // 检查是否为升级物品
                     if (this.HandleUpgrade(obj, Game1.player.CurrentItem))
                     {
                         return;
@@ -56,7 +56,7 @@ namespace SingularityStorage
         {
             if (item == null) return false;
             
-            // Define upgrade amounts
+            // 定义升级数值
             var increment = 0;
             if (item.ItemId == "Singularity.Storage_T1_Comp") increment = 36;
             else if (item.ItemId == "Singularity.Storage_T2_Comp") increment = 100;
@@ -64,23 +64,21 @@ namespace SingularityStorage
             
             if (increment > 0)
             {
-                // Ensure GUID exists
+                // 确保 GUID 存在
                 if (!chest.modData.ContainsKey("SingularityData_GUID"))
                 {
                     chest.modData["SingularityData_GUID"] = Guid.NewGuid().ToString();
                 }
 
-                var guid = chest.modData["SingularityData_GUID"];
-                
-                // Perform upgrade
+                // 执行升级
                 StorageManager.UpgradeCapacity(guid, increment);
                 
-                // Consume item
+                // 消耗物品
                 Game1.player.reduceActiveItemByOne();
                 
-                // Feedback
+                // 反馈
                 Game1.playSound("bubbles");
-                Game1.addHUDMessage(new HUDMessage($"Storage Upgraded! +{increment} Capacity", 2));
+                Game1.addHUDMessage(new HUDMessage($"存储已升级！容量 +{increment}", 2));
                 
                 return true;
             }
@@ -90,7 +88,7 @@ namespace SingularityStorage
 
         private void OpenStorage(StardewValley.Object chestObj)
         {
-            // Ensure the chest has a GUID
+            // 确保箱子拥有 GUID
             if (!chestObj.modData.ContainsKey("SingularityData_GUID"))
             {
                 chestObj.modData["SingularityData_GUID"] = Guid.NewGuid().ToString();
@@ -98,9 +96,9 @@ namespace SingularityStorage
 
             var guid = chestObj.modData["SingularityData_GUID"];
             
-            this._monitor.Log($"Opening Singularity Storage: {guid}", LogLevel.Debug);
+            this._monitor.Log($"正在打开奇点仓库：{guid}", LogLevel.Debug);
             
-            // Open the UI
+            // 打开 UI
             Game1.activeClickableMenu = new SingularityMenu(guid);
         }
     }

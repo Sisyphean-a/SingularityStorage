@@ -96,7 +96,7 @@ namespace SingularityStorage.UI.Components
             this._prevPageButton?.draw(b);
             this._nextPageButton?.draw(b);
 
-            // Draw page number
+            // 绘制页码
             if (this._prevPageButton != null && this._nextPageButton != null)
             {
                 var totalPages = (int)Math.Ceiling(totalItems / (double)this._itemsPerPage);

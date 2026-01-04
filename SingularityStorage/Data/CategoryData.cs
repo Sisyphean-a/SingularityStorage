@@ -4,7 +4,7 @@ namespace SingularityStorage.Data
 {
     public static class CategoryData
     {
-        // Category Constants (as provided by user + official Stardew IDs)
+        // 分类常量（由用户提供 + 官方星露谷 ID）
         public const int GreensCategory = -81;
         public const int GemCategory = -2;
         public const int MineralsCategory = -12;
@@ -50,8 +50,8 @@ namespace SingularityStorage.Data
         public const int JunkCategory = -20;
         public const int LitterCategory = -999;
 
-        // Group Definitions
-        // Used List<int> to preserve display order of sub-categories
+        // 分组定义
+        // 使用 List<int> 以保留子分类的显示顺序
         public static readonly Dictionary<string, List<int>> CategoryGroups = new Dictionary<string, List<int>>
         {
             { "基础资源", new List<int> { GreensCategory, GemCategory, MineralsCategory, MetalResources, BuildingResources } },
@@ -107,7 +107,7 @@ namespace SingularityStorage.Data
 
         public static readonly List<string> Tabs = new List<string>
         {
-            "全部", // All
+            "全部", 
             "基础资源",
             "农产品",
             "动物产品",

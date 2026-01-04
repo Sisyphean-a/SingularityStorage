@@ -9,8 +9,8 @@ namespace SingularityStorage.UI.Controllers
         private readonly string _sourceGuid;
         private readonly InventoryMenu _storageInventory;
         private readonly InventoryMenu _playerInventory;
-        private readonly Func<List<Item?>> _getFullInventory; // Callback to get fresh data source
-        private readonly Action _requestRefresh; // Callback to refresh UI
+        private readonly Func<List<Item?>> _getFullInventory; // 获取最新数据源的回调
+        private readonly Action _requestRefresh; // 刷新 UI 的回调
 
         public Item? HeldItem { get; set; }
         
@@ -34,22 +34,22 @@ namespace SingularityStorage.UI.Controllers
 
         public bool HandleLeftClick(int x, int y, bool isShift)
         {
-            // Handle Storage Inventory clicks
+            // 处理仓库库存点击 (Storage Inventory)
             var clickedItem = this._storageInventory.getItemAt(x, y);
             if (clickedItem != null)
             {
                 if (isShift)
                 {
-                     // Shift + Click: Transfer to Player
+                     // Shift + 点击：转移给玩家 (Transfer to Player)
                      if (Game1.player.couldInventoryAcceptThisItem(clickedItem))
                      {
                          Game1.player.addItemToInventory(clickedItem);
-                         this._storageInventory.actualInventory.Remove(clickedItem); // Visual update
+                         this._storageInventory.actualInventory.Remove(clickedItem); // 视觉上的更新
                          
                          if (Context.IsMainPlayer)
                          {
                              StorageManager.RemoveItem(this._sourceGuid, clickedItem);
-                             // We don't modify FullInventory directly here, trusting Refresh to reload it next frame or callback
+                             // 此处不直接修改 FullInventory，因为我们相信 Refresh 会在下一帧或通过回调重新加载。
                          }
                          Game1.playSound("dwop");
                          this._requestRefresh();
@@ -57,7 +57,7 @@ namespace SingularityStorage.UI.Controllers
                      return true;
                 }
                 
-                // Normal Click: Pick up
+                // 普通点击：拿起物品 (Pick up)
                 if (this.HeldItem == null)
                 {
                     this.HeldItem = clickedItem;
@@ -74,13 +74,13 @@ namespace SingularityStorage.UI.Controllers
                 }
             }
 
-            // Handle Player Inventory clicks
+            // 处理玩家背包点击 (Player Inventory)
             var playerItem = this._playerInventory.getItemAt(x, y);
             if (playerItem != null)
             {
                 if (isShift)
                 {
-                    // Shift + Click: Transfer to Storage
+                    // Shift + 点击：转移到仓库 (Transfer to Storage)
                     if (Context.IsMainPlayer)
                     {
                         StorageManager.AddItem(this._sourceGuid, playerItem);
@@ -92,7 +92,7 @@ namespace SingularityStorage.UI.Controllers
                     return true;
                 }
                 
-                // Normal Click: Pick up
+                // 普通点击：拿起物品 (Pick up)
                 if (this.HeldItem == null)
                 {
                     this.HeldItem = playerItem;
@@ -102,10 +102,10 @@ namespace SingularityStorage.UI.Controllers
                 }
             }
 
-            // Place held item
+            // 放置拿在手中的物品
             if (this.HeldItem != null)
             {
-                // Try to place in storage
+                // 尝试放入仓库
                 if (this._storageInventory.isWithinBounds(x, y))
                 {
                     if (Context.IsMainPlayer)
@@ -120,7 +120,7 @@ namespace SingularityStorage.UI.Controllers
                     }
                     else
                     {
-                        // Item was not fully added (capacity full)
+                        // 物品未能完全添加（容量已满）
                         Game1.playSound("cancel");
                         Game1.addHUDMessage(new HUDMessage("Storage Full", 3));
                     }
@@ -129,7 +129,7 @@ namespace SingularityStorage.UI.Controllers
                     return true;
                 }
 
-                // Try to place in player inventory
+                // 尝试放入玩家背包
                 if (this._playerInventory.isWithinBounds(x, y))
                 {
                     Game1.player.addItemToInventory(this.HeldItem);
@@ -144,17 +144,17 @@ namespace SingularityStorage.UI.Controllers
 
         public bool HandleRightClick(int x, int y)
         {
-            // Storage Logic: Take One
+            // 仓库逻辑：拿取一个 (Take One)
             var storageItem = this._storageInventory.getItemAt(x, y);
             if (storageItem != null)
             {
-                // If holding nothing -> Take one
+                // 如果手中没有拿东西 -> 拿取一个
                 if (this.HeldItem == null)
                 {
                     var single = storageItem.getOne();
                     this.HeldItem = single;
                     
-                    // Reduce stack in storage
+                    // 减少仓库中的堆叠数量
                      storageItem.Stack--;
                      if (storageItem.Stack <= 0)
                      {
@@ -162,12 +162,12 @@ namespace SingularityStorage.UI.Controllers
                      }
                     
                      Game1.playSound("dwop");
-                     this._requestRefresh(); // Update counts
+                     this._requestRefresh(); // 更新计数
                      return true;
                 }
                 else
                 {
-                    // If holding something -> Place one IF matches
+                    // 如果手中拿有东西 -> 如果匹配则放置一个 (Place one IF matches)
                     if (this.HeldItem.canStackWith(storageItem))
                     {
                         if (Context.IsMainPlayer)
@@ -185,7 +185,7 @@ namespace SingularityStorage.UI.Controllers
                     }
                 }
             }
-            // Storage Logic: Place One in Empty Slot (or just add to pool)
+            // 仓库逻辑：在空白槽位放置一个（或直接加入池中）
             else if (this._storageInventory.isWithinBounds(x, y))
             {
                 if (this.HeldItem != null && Context.IsMainPlayer)
@@ -202,7 +202,7 @@ namespace SingularityStorage.UI.Controllers
                 }
             }
 
-            // Player Inventory Logic: Split / Place One
+            // 玩家背包逻辑：拆分 / 放置一个 (Split / Place One)
             var playerItem = this._playerInventory.getItemAt(x, y);
             if (playerItem != null)
             {

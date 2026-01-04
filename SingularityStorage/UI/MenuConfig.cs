@@ -3,7 +3,7 @@ using Newtonsoft.Json;
 namespace SingularityStorage.UI
 {
     /// <summary>
-    /// Configuration data for the Singularity Menu UI.
+    /// 奇点菜单 UI 的配置数据。
     /// </summary>
     public class MenuConfig
     {
@@ -20,7 +20,7 @@ namespace SingularityStorage.UI
         public LoadingTextConfig LoadingText { get; set; } = new();
 
         /// <summary>
-        /// Loads the menu configuration from the JSON file.
+        /// 从 JSON 文件加载菜单配置。
         /// </summary>
         public static MenuConfig Load(string configPath)
         {
@@ -37,7 +37,7 @@ namespace SingularityStorage.UI
                 ModEntry.Instance?.Monitor.Log($"Failed to load MenuConfig: {ex.Message}", StardewModdingAPI.LogLevel.Error);
             }
 
-            // Return default config if loading fails
+            // 如果加载失败，则返回默认配置
             return new MenuConfig();
         }
     }
@@ -66,7 +66,7 @@ namespace SingularityStorage.UI
         public int OffsetX { get; set; } = 200;
         public int Width { get; set; } = 400;
         public int Height { get; set; } = 36;
-        public string Placeholder { get; set; } = "Search...";
+        public string Placeholder { get; set; } = "搜索...";
     }
 
     public class PageButtonsConfig

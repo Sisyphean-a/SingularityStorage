@@ -7,18 +7,18 @@ namespace SingularityStorage.Network
         public string? SourceGuid { get; set; }
         public PacketType Type { get; set; }
         
-        // Data Payloads (nullable depending on type)
-        // We use simple fields for now.
+        // 数据负荷 (根据包类型可能为空)
+        // 目前我们使用简单的字段。
         
-        // For RequestPage
+        // 用于 RequestPage (请求页面)
         public int PageIndex { get; set; }
         public string? SearchQuery { get; set; }
         
-        // For RespondPage
+        // 用于 RespondPage (响应页面)
         public List<Item?>? Items { get; set; }
         public int TotalItems { get; set; }
         
-        // For Action (Deposit/Withdraw)
+        // 用于 Action (存入/取出)
         public string? ItemId { get; set; }
         public int Quantity { get; set; }
         public bool IsDeposit { get; set; }
@@ -26,9 +26,9 @@ namespace SingularityStorage.Network
 
     public enum PacketType
     {
-        RequestView, // Client requests initial data/page
-        RespondView, // Host sends page data
-        RequestTransfer, // Client wants to move item
-        NotifyUpdate // Host tells clients content changed
+        RequestView, // 客户端请求初始数据/页面
+        RespondView, // 主机发送页面数据
+        RequestTransfer, // 客户端请求移动物品
+        NotifyUpdate // 主机通知客户端内容已更改
     }
 }

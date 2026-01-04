@@ -11,7 +11,7 @@ namespace SingularityStorage.UI.Components
         public List<ClickableComponent> SubCategoryTabs { get; private set; } = new List<ClickableComponent>();
         
         public string SelectedGroup { get; private set; } = "全部";
-        public int? SelectedSubCategory { get; private set; } // null means 'All'
+        public int? SelectedSubCategory { get; private set; } // null 表示“全部”
 
         private const int TabWidth = 110;
         private const int TabHeight = 64;
@@ -21,9 +21,9 @@ namespace SingularityStorage.UI.Components
 
         public void Initialize(int xPositionOnScreen, int yPositionOnScreen)
         {
-            // Initialize Category Tabs (Major Groups)
+            // 初始化分类标签 (主要分组)
             this.CategoryTabs.Clear();
-            var majorTabX = xPositionOnScreen - (TabWidth * 2) - 8; // Extra padding
+            var majorTabX = xPositionOnScreen - (TabWidth * 2) - 8; // 额外的内边距
             var tabY = yPositionOnScreen + 64;
             
             for (var i = 0; i < this._groups.Count; i++)
@@ -42,12 +42,12 @@ namespace SingularityStorage.UI.Components
             var subTabX = xPositionOnScreen - TabWidth;
             var tabY = yPositionOnScreen + 64;
             
-            // Always add "All" (全部) option for sub-category
+            // 始终为子分类添加“全部” (All) 选项
             this.SubCategoryTabs.Add(new ClickableComponent(
                 new Rectangle(subTabX, tabY, TabWidth, TabHeight), 
                 "全部") 
             { 
-                myID = -9999 // Special ID for 'All'
+                myID = -9999 // “全部”选项的特殊 ID
             });
             
             if (Data.CategoryData.CategoryGroups.TryGetValue(this.SelectedGroup, out var subCats))
@@ -69,7 +69,7 @@ namespace SingularityStorage.UI.Components
 
         public bool HandleClick(int x, int y, int xPositionOnScreen, int yPositionOnScreen)
         {
-            // Handle Category Tabs (Major)
+            // 处理主分类标签 (Major) 点击
             foreach (var tab in this.CategoryTabs)
             {
                 if (tab.containsPoint(x, y))
@@ -86,7 +86,7 @@ namespace SingularityStorage.UI.Components
                 }
             }
 
-            // Handle SubCategory Tabs
+            // 处理子分类标签点击
             if (this.SelectedGroup != "全部")
             {
                 foreach (var tab in this.SubCategoryTabs)
@@ -113,7 +113,7 @@ namespace SingularityStorage.UI.Components
 
         public void Draw(SpriteBatch b)
         {
-            // Draw Major Tabs
+            // 绘制主标签 (Major Tabs)
             foreach (var tab in this.CategoryTabs)
             {
                  var selected = (tab.name == this.SelectedGroup);
@@ -128,7 +128,7 @@ namespace SingularityStorage.UI.Components
                  b.DrawString(Game1.smallFont, tab.name, textPos, Game1.textColor);
             }
             
-            // Draw Sub Tabs
+            // 绘制子标签 (Sub Tabs)
             if (this.SelectedGroup != "全部")
             {
                 foreach (var tab in this.SubCategoryTabs)
