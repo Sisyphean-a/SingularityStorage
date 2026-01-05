@@ -16,7 +16,7 @@ namespace SingularityStorage.UI
         public PlayerInventoryConfig PlayerInventory { get; set; } = new();
         public SeparatorConfig Separator { get; set; } = new();
         public ButtonConfig OkButton { get; set; } = new();
-        public FillStacksButtonConfig? FillStacksButton { get; set; }
+        public FillStacksButtonConfig? FillStacksButton { get; set; } = new();
         public LoadingTextConfig LoadingText { get; set; } = new();
 
         /// <summary>
@@ -44,83 +44,91 @@ namespace SingularityStorage.UI
 
     public class MenuDimensions
     {
-        public int Width { get; set; } = 950;
-        public int Height { get; set; } = 750;
+        public int Width { get; set; } = 1100;
+        public int Height { get; set; } = 920;
     }
 
     public class TitleConfig
     {
         public string Text { get; set; } = "奇点存储 (Singularity Storage)";
-        public int OffsetY { get; set; } = 40;
+        public int OffsetY { get; set; } = 50;
     }
 
     public class HeaderConfig
     {
-        public int OffsetY { get; set; } = 80;
+        public int OffsetY { get; set; } = 100;
         public int Height { get; set; } = 64;
-        public int Padding { get; set; } = 16;
+        public int Padding { get; set; } = 24;
     }
 
     public class SearchBarConfig
     {
-        public int OffsetX { get; set; } = 200;
-        public int Width { get; set; } = 400;
+        public int OffsetX { get; set; } = 240;
+        public int Width { get; set; } = 450;
         public int Height { get; set; } = 36;
-        public string Placeholder { get; set; } = "搜索...";
+        public string Placeholder { get; set; } = "Search...";
     }
 
     public class PageButtonsConfig
     {
-        public int PrevOffsetX { get; set; } = 42;
-        public int NextOffsetX { get; set; } = 106;
+        public int PrevOffsetX { get; set; } = 50;
+        public int NextOffsetX { get; set; } = 120;
         public int Width { get; set; } = 48;
         public int Height { get; set; } = 44;
     }
 
     public class InventoryConfig
     {
-        public int OffsetX { get; set; } = 32;
-        public int OffsetY { get; set; } = 180;
-        public int Columns { get; set; } = 9;
-        public int Rows { get; set; } = 3;
-        public int SlotSpacing { get; set; } = 0;
+        public int OffsetX { get; set; } = 60;
+        public int OffsetY { get; set; } = 200;
+        public int Columns { get; set; } = 14;
+        public int Rows { get; set; } = 5;
+        public int SlotSpacing { get; set; } = 4;
     }
 
     public class PlayerInventoryConfig
     {
-        public int OffsetX { get; set; } = 32;
-        public int OffsetFromBottom { get; set; } = 220;
+        public int OffsetX { get; set; } = 60;
+        public int OffsetFromBottom { get; set; } = 240;
     }
 
     public class SeparatorConfig
     {
-        public int OffsetFromInventory { get; set; } = 32;
+        public int OffsetFromInventory { get; set; } = 40;
         public int Height { get; set; } = 16;
     }
 
     public class ButtonConfig
     {
-        public int OffsetFromRight { get; set; } = 80;
-        public int OffsetFromBottom { get; set; } = 80;
+        public int OffsetFromRight { get; set; } = 100;
+        public int OffsetFromBottom { get; set; } = 100;
         public int Size { get; set; } = 64;
     }
 
     public class FillStacksButtonConfig : ButtonConfig
     {
-         public TextureSourceConfig? TextureSource { get; set; }
+         public TextureSourceConfig? TextureSource { get; set; } = new TextureSourceConfig();
+
+         public FillStacksButtonConfig()
+         {
+             // Override base defaults for this specific button
+             OffsetFromRight = 80;
+             OffsetFromBottom = 696;
+             Size = 48;
+         }
     }
 
     public class TextureSourceConfig
     {
-        public int X { get; set; }
-        public int Y { get; set; }
-        public int Width { get; set; }
-        public int Height { get; set; }
+        public int X { get; set; } = 103;
+        public int Y { get; set; } = 469;
+        public int Width { get; set; } = 16;
+        public int Height { get; set; } = 16;
     }
 
     public class LoadingTextConfig
     {
         public string Text { get; set; } = "加载中...";
-        public int OffsetY { get; set; } = 100;
+        public int OffsetY { get; set; } = 120;
     }
 }
