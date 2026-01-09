@@ -1,6 +1,7 @@
 using StardewModdingAPI;
 using StardewValley;
 using StardewValley.Menus;
+using System.Linq;
 
 namespace SingularityStorage.UI.Controllers
 {
@@ -263,6 +264,32 @@ namespace SingularityStorage.UI.Controllers
                 }
                 this.HeldItem = null;
             }
+        }
+
+        public void FillExistingStacks()
+        {
+            var fullInventory = this._getFullInventory();
+            var playerItems = Game1.player.Items.Where(i => i != null).ToList();
+            var changed = false;
+
+            foreach (var pItem in playerItems.OfType<Item>()
+                         .Select(pItem => new
+                         {
+                             pItem,
+                             exists = fullInventory.Any(sItem => sItem != null && sItem.canStackWith(pItem))
+                         })
+                         .Where(t => t.exists)
+                         .Where(_ => Context.IsMainPlayer)
+                         .Select(t => t.pItem))
+            {
+                StorageManager.AddItem(_sourceGuid, pItem);
+                Game1.player.removeItemFromInventory(pItem);
+                changed = true;
+            }
+
+            if (!changed || !Context.IsMainPlayer) return;
+            Game1.playSound("Ship");
+            this._requestRefresh();
         }
     }
 }

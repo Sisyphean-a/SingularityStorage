@@ -7,6 +7,7 @@ using StardewValley.Menus;
 using SingularityStorage.Network;
 using SingularityStorage.UI.Components;
 using SingularityStorage.UI.Controllers;
+using SingularityStorage.UI.Data;
 
 namespace SingularityStorage.UI
 {
@@ -27,8 +28,7 @@ namespace SingularityStorage.UI
 
         // 核心数据
         private string _sourceGuid;
-        private List<Item?> _fullInventory = new List<Item?>(); 
-        private List<Item?> _filteredInventory = new List<Item?>();
+        private InventoryDataSource _dataSource = new InventoryDataSource();
         private int ItemsPerPage => Config.StorageInventory.Columns * Config.StorageInventory.Rows;
         
         private string _cachedCapacityText = "";
@@ -87,7 +87,7 @@ namespace SingularityStorage.UI
                 guid, 
                 this._storageInventory, 
                 this._playerInventory,
-                () => this._fullInventory, 
+                () => this._dataSource.FullItems.ToList(), 
                 () => this.ApplyFilters() // 刷新回调，调用 ApplyFilters 以进行重新排序/过滤
             );
             
@@ -100,8 +100,8 @@ namespace SingularityStorage.UI
             if (Context.IsMainPlayer)
             {
                 var data = StorageManager.GetInventory(guid);
-                this._fullInventory = data.Inventory.Values.SelectMany(x => x).Cast<Item?>().ToList();
-                this._filteredInventory = this._fullInventory;
+                this._dataSource.UpdateSource(data.Inventory.Values.SelectMany(x => x).Cast<Item?>().ToList());
+                this._dataSource.ApplyFilter("", "全部", null); 
                 this.RefreshView();
             }
             else
@@ -182,72 +182,30 @@ namespace SingularityStorage.UI
                 return;
             }
 
-            // 主要是为了确保同步而从源重新加载数据，
-            // 尽管我们通常已经更新了 FullInventory。
-            // 为了万无一失：
+            // 主要是为了确保同步而从源重新加载数据
             var data = StorageManager.GetInventory(this._sourceGuid);
-            this._fullInventory = data.Inventory.Values.SelectMany(x => x).Cast<Item?>().ToList();
+            this._dataSource.UpdateSource(data.Inventory.Values.SelectMany(x => x).Cast<Item?>().ToList());
             
-            // 重新应用过滤逻辑（尽可能不重置页面，但 ApplyFilters 通常会重置页面）
-            // 这里我们只想根据当前的 FilteredInventory 和 Page 更新视图。
-            // 但是如果 FullInventory 发生了变化，我们可能需要重新过滤。
-            // 假设 FilteredInventory 相对于 FullInventory 是最新的，除非我们刚刚添加/删除了物品。
-            // 实际上，InventoryHandler 更新存储并调用此方法。
-            // 所以我们确实需要重新过滤，调用 UpdateFilteredList 逻辑。
+            // 重新应用过滤逻辑
+            var query = this._searchBar?.Text?.Trim() ?? "";
+            this._dataSource.ApplyFilter(query, this._sidebar.SelectedGroup, this._sidebar.SelectedSubCategory);
             
-            // 但是 ApplyFilters 会将 Page 重置为 0。这对于点击“下一页”来说是不利的。
-            // 所以我们将“更新列表”与“重置过滤器”分开。
-            
-            this.UpdateFilteredList();
+            var totalItems = this._dataSource.TotalCount;
+            var totalPages = this._dataSource.GetTotalPages(ItemsPerPage);
 
-            var totalItems = this._filteredInventory.Count;
-            var totalPages = (int)Math.Ceiling(totalItems / (double)ItemsPerPage);
-            if (totalPages == 0) totalPages = 1;
-
-            if (this._pagination.CurrentPage >= totalPages) this._pagination.ResetPage(); // 或者设置为最大值
+            if (this._pagination.CurrentPage >= totalPages) this._pagination.ResetPage();
             
-            var startIndex = this._pagination.CurrentPage * ItemsPerPage;
-            var pageItems = this._filteredInventory
-                .Skip(startIndex)
-                .Take(ItemsPerPage)
-                .ToList();
-
-            this._storageInventory.actualInventory = pageItems.Cast<Item>().ToList();
+            var pageItems = this._dataSource.GetPage(this._pagination.CurrentPage, ItemsPerPage);
+            this._storageInventory.actualInventory = pageItems;
             
             var (used, max) = StorageManager.GetCounts(this._sourceGuid);
             this._cachedCapacityText = $"{used} / {max}";
         }
 
-        private void UpdateFilteredList()
-        {
-             var query = this._searchBar?.Text?.Trim() ?? "";
-             
-             IEnumerable<Item?> items = this._fullInventory;
-
-             // 1. 按分类组过滤
-             if (this._sidebar.SelectedGroup != "全部")
-             {
-                 items = items.Where(item => Data.CategoryData.IsItemInGroup(item, this._sidebar.SelectedGroup));
-                 
-                 // 2. 按子分类过滤
-                 if (this._sidebar.SelectedSubCategory.HasValue && this._sidebar.SelectedSubCategory.Value != -9999)
-                 {
-                     items = items.Where(item => item != null && item.Category == this._sidebar.SelectedSubCategory.Value);
-                 }
-             }
-
-             // 3. 按搜索关键词过滤
-             if (!string.IsNullOrEmpty(query))
-             {
-                 items = items.Where(item => item != null && item.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
-             }
-
-             this._filteredInventory = items.ToList();
-        }
-
         private void ApplyFilters()
         {
-            this.UpdateFilteredList();
+            var query = this._searchBar?.Text ?? "";
+            this._dataSource.ApplyFilter(query, this._sidebar.SelectedGroup, this._sidebar.SelectedSubCategory);
             this._pagination.ResetPage();
             this.RefreshView();
         }
@@ -264,29 +222,7 @@ namespace SingularityStorage.UI
         
         private void FillExistingStacks()
         {
-             // 与原始逻辑类似，逻辑可以移至 Handler，但暂时保留在此处，因为它负责编排。
-             // Handler 处理单次点击。
-             var playerItems = Game1.player.Items.Where(i => i != null).ToList();
-             var changed = false;
-
-             foreach (var pItem in playerItems.OfType<Item>()
-                          .Select(pItem => new
-                          {
-                              pItem,
-                              exists = _fullInventory.Any(sItem => sItem != null && sItem.canStackWith(pItem))
-                          })
-                          .Where(t => t.exists)
-                          .Where(_ => Context.IsMainPlayer)
-                          .Select(t => t.pItem))
-             {
-                 StorageManager.AddItem(_sourceGuid, pItem);
-                 Game1.player.removeItemFromInventory(pItem);
-                 changed = true;
-             }
-
-             if (!changed || !Context.IsMainPlayer) return;
-             Game1.playSound("Ship");
-             RefreshView();
+             this._inventoryHandler.FillExistingStacks();
         }
 
         public override void receiveLeftClick(int x, int y, bool playSound = true)
@@ -307,7 +243,7 @@ namespace SingularityStorage.UI
             }
             
             // 组件点击处理
-            if (this._pagination.HandleClick(x, y, this._filteredInventory.Count)) return;
+            if (this._pagination.HandleClick(x, y, this._dataSource.TotalCount)) return;
             if (this._sidebar.HandleClick(x, y, this.xPositionOnScreen, this.yPositionOnScreen)) return;
 
             var isShift = (Game1.oldKBState.IsKeyDown(Keys.LeftShift) || Game1.oldKBState.IsKeyDown(Keys.RightShift));
@@ -318,7 +254,7 @@ namespace SingularityStorage.UI
 
         public override void receiveRightClick(int x, int y, bool playSound = true)
         {
-            if (this._pagination.HandleClick(x, y, this._filteredInventory.Count)) return; // 将分页按钮上的右键点击视为普通点击？通常不会，但很安全。
+            if (this._pagination.HandleClick(x, y, this._dataSource.TotalCount)) return; // 将分页按钮上的右键点击视为普通点击？通常不会，但很安全。
 
             if (this._inventoryHandler.HandleRightClick(x, y)) return;
         }
@@ -374,7 +310,7 @@ namespace SingularityStorage.UI
             }
 
             // 绘制分页控制
-            this._pagination.Draw(b, this._filteredInventory.Count);
+            this._pagination.Draw(b, this._dataSource.TotalCount);
 
             // 绘制仓库库存
             this._storageInventory.draw(b);
