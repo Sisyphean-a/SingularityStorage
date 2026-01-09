@@ -58,30 +58,30 @@ namespace SingularityStorage.UI
     public class HeaderConfig
     {
         public int OffsetY { get; set; } = 100;
-        public int Height { get; set; } = 64;
-        public int Padding { get; set; } = 24;
+        public int Height { get; set; } = 52;
+        public int Padding { get; set; } = 32;
     }
 
     public class SearchBarConfig
     {
-        public int OffsetX { get; set; } = 240;
-        public int Width { get; set; } = 450;
-        public int Height { get; set; } = 36;
+        public int OffsetX { get; set; } = 180;
+        public int Width { get; set; } = 500;
+        public int Height { get; set; } = 40;
         public string Placeholder { get; set; } = "Search...";
     }
 
     public class PageButtonsConfig
     {
-        public int PrevOffsetX { get; set; } = 50;
-        public int NextOffsetX { get; set; } = 120;
-        public int Width { get; set; } = 48;
-        public int Height { get; set; } = 44;
+        public int PrevOffsetX { get; set; } = 44;
+        public int NextOffsetX { get; set; } = 108;
+        public int Width { get; set; } = 44;
+        public int Height { get; set; } = 40;
     }
 
     public class InventoryConfig
     {
         public int OffsetX { get; set; } = 60;
-        public int OffsetY { get; set; } = 200;
+        public int OffsetY { get; set; } = 180;
         public int Columns { get; set; } = 14;
         public int Rows { get; set; } = 5;
         public int SlotSpacing { get; set; } = 4;
@@ -113,8 +113,8 @@ namespace SingularityStorage.UI
          public FillStacksButtonConfig()
          {
              // Override base defaults for this specific button
-             OffsetFromRight = 80;
-             OffsetFromBottom = 696;
+             OffsetFromRight = 96;
+             OffsetFromBottom = 816;
              Size = 48;
          }
     }
@@ -134,8 +134,8 @@ namespace SingularityStorage.UI
          public StoreAllButtonConfig()
          {
              // 位置在填充堆叠按钮左侧
-             OffsetFromRight = 140;
-             OffsetFromBottom = 696;
+             OffsetFromRight = 160;
+             OffsetFromBottom = 816;
              Size = 48;
          }
     }

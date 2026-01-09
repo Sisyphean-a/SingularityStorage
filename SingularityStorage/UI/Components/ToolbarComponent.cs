@@ -26,37 +26,42 @@ namespace SingularityStorage.UI.Components
         public void Initialize(int x, int y, int menuWidth, int menuHeight, MenuConfig config)
         {
             var headerY = y + config.Header.OffsetY;
+            // 计算顶栏的垂直中心位置，用于按钮对齐
+            var headerCenterY = headerY + (config.Header.Height - config.SearchBar.Height) / 2;
 
-            // 搜索栏
+            // 搜索栏 - 垂直居中于顶栏
             this._searchBar = new TextBox(
-                Game1.content.Load<Texture2D>("LooseSprites\\textBox"), 
-                null, 
-                Game1.smallFont, 
+                Game1.content.Load<Texture2D>("LooseSprites\\textBox"),
+                null,
+                Game1.smallFont,
                 Game1.textColor)
             {
                 X = x + config.SearchBar.OffsetX,
-                Y = headerY,
+                Y = headerCenterY,
                 Width = config.SearchBar.Width,
                 Height = config.SearchBar.Height
             };
             
-            // 填充堆叠按钮
+            // 计算按钮的垂直位置，使其与顶栏垂直居中对齐
+            var buttonCenterY = headerY + (config.Header.Height - config.FillStacksButton?.Size ?? 48) / 2;
+            
+            // 填充堆叠按钮 - 位于右侧
             if (config.FillStacksButton != null)
             {
                  var srcRect = new Rectangle(103, 469, 16, 16);
                  if (config.FillStacksButton.TextureSource != null)
                  {
                      srcRect = new Rectangle(
-                         config.FillStacksButton.TextureSource.X, 
-                         config.FillStacksButton.TextureSource.Y, 
-                         config.FillStacksButton.TextureSource.Width, 
+                         config.FillStacksButton.TextureSource.X,
+                         config.FillStacksButton.TextureSource.Y,
+                         config.FillStacksButton.TextureSource.Width,
                          config.FillStacksButton.TextureSource.Height);
                  }
                  
                  var scale = config.FillStacksButton.Size / (float)srcRect.Width;
                  
                  var buttonX = x + menuWidth - config.FillStacksButton.OffsetFromRight - config.FillStacksButton.Size;
-                 var buttonY = y + config.Header.OffsetY + 8; // 微调垂直对齐
+                 var buttonY = headerY + (config.Header.Height - config.FillStacksButton.Size) / 2;
                  
                  this._fillStacksButton = new ClickableTextureComponent(
                     new Rectangle(
@@ -80,23 +85,23 @@ namespace SingularityStorage.UI.Components
                 Game1.getSourceRectForStandardTileSheet(Game1.mouseCursors, 46),
                 1f);
 
-            // 全部存入按钮
+            // 全部存入按钮 - 位于填充按钮左侧
             if (config.StoreAllButton != null)
             {
                  var srcRect = new Rectangle(103, 469, 16, 16);
                  if (config.StoreAllButton.TextureSource != null)
                  {
                      srcRect = new Rectangle(
-                         config.StoreAllButton.TextureSource.X, 
-                         config.StoreAllButton.TextureSource.Y, 
-                         config.StoreAllButton.TextureSource.Width, 
+                         config.StoreAllButton.TextureSource.X,
+                         config.StoreAllButton.TextureSource.Y,
+                         config.StoreAllButton.TextureSource.Width,
                          config.StoreAllButton.TextureSource.Height);
                  }
                  
                  var scale = config.StoreAllButton.Size / (float)srcRect.Width;
                  
                  var buttonX = x + menuWidth - config.StoreAllButton.OffsetFromRight - config.StoreAllButton.Size;
-                 var buttonY = y + config.Header.OffsetY + 8;
+                 var buttonY = headerY + (config.Header.Height - config.StoreAllButton.Size) / 2;
                  
                  this._storeAllButton = new ClickableTextureComponent(
                     new Rectangle(

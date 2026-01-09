@@ -96,7 +96,7 @@ namespace SingularityStorage.UI
             this._pagination.OnPageChanged += this.RefreshView;
             
             this._toolbar.OnSearchChanged += (text) => this.ApplyFilters();
-            this._toolbar.OnCloseClicked += this.exitThisMenu;
+            this._toolbar.OnCloseClicked += () => this.exitThisMenu();
             this._toolbar.OnFillStacksClicked += this.FillExistingStacks;
             this._toolbar.OnStoreAllClicked += this.StoreAll;
 

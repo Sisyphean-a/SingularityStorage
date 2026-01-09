@@ -9,24 +9,24 @@
   },
   "Header": {
     "OffsetY": 100,
-    "Height": 64,
-    "Padding": 24
+    "Height": 52,
+    "Padding": 32
   },
   "SearchBar": {
-    "OffsetX": 240,
-    "Width": 450,
-    "Height": 36,
+    "OffsetX": 180,
+    "Width": 500,
+    "Height": 40,
     "Placeholder": "Search..."
   },
   "PageButtons": {
-    "PrevOffsetX": 50,
-    "NextOffsetX": 120,
-    "Width": 48,
-    "Height": 44
+    "PrevOffsetX": 44,
+    "NextOffsetX": 108,
+    "Width": 44,
+    "Height": 40
   },
   "StorageInventory": {
     "OffsetX": 60,
-    "OffsetY": 200,
+    "OffsetY": 180,
     "Columns": 14,
     "Rows": 5,
     "SlotSpacing": 4
@@ -39,9 +39,20 @@
     "OffsetFromInventory": 40,
     "Height": 16
   },
+  "StoreAllButton": {
+    "OffsetFromRight": 160,
+    "OffsetFromBottom": 816,
+    "Size": 48,
+    "TextureSource": {
+      "X": 103,
+      "Y": 469,
+      "Width": 16,
+      "Height": 16
+    }
+  },
   "FillStacksButton": {
-    "OffsetFromRight": 80,
-    "OffsetFromBottom": 696,
+    "OffsetFromRight": 96,
+    "OffsetFromBottom": 816,
     "Size": 48,
     "TextureSource": {
       "X": 103,

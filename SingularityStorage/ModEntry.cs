@@ -41,7 +41,7 @@ namespace SingularityStorage
             StorageManager.Initialize(this.Monitor, this.Helper.Data);
             
             // 初始化处理器
-            InteractionHandler(this.Helper, this.Monitor);
+            new InteractionHandler(this.Helper, this.Monitor);
             
             // 初始化网络
             Network.NetworkManager.Initialize(this.Helper, this.Monitor);

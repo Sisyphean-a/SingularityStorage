@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using StardewValley;
 using StardewValley.Menus;
+using SingularityStorage.Data;
 
 namespace SingularityStorage.UI.Components
 {
@@ -11,11 +12,17 @@ namespace SingularityStorage.UI.Components
         public List<ClickableComponent> SubCategoryTabs { get; private set; } = new List<ClickableComponent>();
         
         public string SelectedGroup { get; private set; } = "全部";
-        public int? SelectedSubCategory { get; private set; } // null 表示“全部”
+        public int? SelectedSubCategory { get; private set; } // null 表示"全部"
 
-        private const int TabWidth = 110;
-        private const int TabHeight = 64;
-        private readonly List<string> _groups = Data.CategoryData.Tabs;
+        // 尺寸参数 - 确保能容纳四个中文字符
+        private const int MajorTabWidth = 100;    // 主分类宽度（四字）
+        private const int SubTabWidth = 88;       // 子分类宽度（三字为主）
+        private const int TabHeight = 52;         // 标签高度
+        private const int TabSpacing = 2;         // 标签之间的垂直间距
+        private const int ColumnGap = 8;          // 两列之间的间距
+        private const int TopPadding = 56;        // 顶部内边距，与主面板对齐
+        
+        private readonly List<string> _groups = CategoryData.Tabs;
 
         public event Action? OnFilterChanged;
 
@@ -23,13 +30,14 @@ namespace SingularityStorage.UI.Components
         {
             // 初始化分类标签 (主要分组)
             this.CategoryTabs.Clear();
-            var majorTabX = xPositionOnScreen - (TabWidth * 2) - 8; // 额外的内边距
-            var tabY = yPositionOnScreen + 64;
+            // 主分类列：在子分类列左侧
+            var majorTabX = xPositionOnScreen - MajorTabWidth - SubTabWidth - ColumnGap - 12;
+            var tabY = yPositionOnScreen + TopPadding;
             
             for (var i = 0; i < this._groups.Count; i++)
             {
                 this.CategoryTabs.Add(new ClickableComponent(
-                    new Rectangle(majorTabX, tabY + (i * TabHeight), TabWidth, TabHeight), 
+                    new Rectangle(majorTabX, tabY + (i * (TabHeight + TabSpacing)), MajorTabWidth, TabHeight),
                     this._groups[i]));
             }
             
@@ -39,26 +47,33 @@ namespace SingularityStorage.UI.Components
         private void UpdateSubCategories(int xPositionOnScreen, int yPositionOnScreen)
         {
             this.SubCategoryTabs.Clear();
-            var subTabX = xPositionOnScreen - TabWidth;
-            var tabY = yPositionOnScreen + 64;
+            // 子分类列：紧贴主面板左侧
+            var subTabX = xPositionOnScreen - SubTabWidth - 4;
+            var tabY = yPositionOnScreen + TopPadding;
             
-            // 始终为子分类添加“全部” (All) 选项
+            // 只有当选择了非"全部"的主分类时才显示子分类
+            if (this.SelectedGroup == "全部")
+            {
+                return; // 不显示子分类
+            }
+            
+            // 添加"全部" (All) 选项
             this.SubCategoryTabs.Add(new ClickableComponent(
-                new Rectangle(subTabX, tabY, TabWidth, TabHeight), 
-                "全部") 
-            { 
-                myID = -9999 // “全部”选项的特殊 ID
+                new Rectangle(subTabX, tabY, SubTabWidth, TabHeight),
+                "全部")
+            {
+                myID = -9999 // "全部"选项的特殊 ID
             });
             
-            if (Data.CategoryData.CategoryGroups.TryGetValue(this.SelectedGroup, out var subCats))
+            if (CategoryData.CategoryGroups.TryGetValue(this.SelectedGroup, out var subCats))
             {
                  for (var i = 0; i < subCats.Count; i++)
                  {
                      var catId = subCats[i];
-                     var name = Data.CategoryData.GetCategoryName(catId);
+                     var name = CategoryData.GetCategoryName(catId);
                      
                      this.SubCategoryTabs.Add(new ClickableComponent(
-                        new Rectangle(subTabX, tabY + ((i + 1) * TabHeight), TabWidth, TabHeight), 
+                        new Rectangle(subTabX, tabY + ((i + 1) * (TabHeight + TabSpacing)), SubTabWidth, TabHeight),
                         name)
                      {
                          myID = catId

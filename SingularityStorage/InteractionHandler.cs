@@ -76,6 +76,8 @@ namespace SingularityStorage
                     chest.modData["SingularityData_GUID"] = Guid.NewGuid().ToString();
                 }
 
+                var guid = chest.modData["SingularityData_GUID"];
+
                 // 执行升级
                 StorageManager.UpgradeCapacity(guid, increment);
                 

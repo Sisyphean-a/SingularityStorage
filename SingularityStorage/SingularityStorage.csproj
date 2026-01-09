@@ -9,13 +9,12 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.3.0" />
+        <PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.4.0" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     </ItemGroup>
 
     <ItemGroup>
         <None Include="manifest.json" CopyToOutputDirectory="Always" />
-        <None Include="content.json" CopyToOutputDirectory="Always" />
         <None Include="assets\**" CopyToOutputDirectory="Always" />
         <None Include="i18n\**" CopyToOutputDirectory="Always" />
         <None Include="UI\**" CopyToOutputDirectory="Always" />
