@@ -2,6 +2,7 @@ using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
 using SingularityStorage.UI;
+using SingularityStorage.Framework.Content;
 
 namespace SingularityStorage
 {
@@ -12,7 +13,9 @@ namespace SingularityStorage
         
         // 定义自定义对象的限定物品 ID。
         // 格式：(BC)ModID_ItemId
-        private const string SingularityChestId = "(BC)Singularity.Storage_SingularityChest";
+        // 定义自定义对象的限定物品 ID。
+        // 格式：(BC)ModID_ItemId
+        private const string SingularityChestQualifiedId = $"(BC){ItemDefinitions.SingularityChestId}";
 
         public InteractionHandler(IModHelper helper, IMonitor monitor)
         {
@@ -36,7 +39,10 @@ namespace SingularityStorage
                 // 在 1.6 中，我们检查 QualifiedItemId
                 // 由于 CP 使用 ModId 作为前缀，我们需要匹配 content.json 中的内容
                 // manifest.json 的 ID 是 "Singularity.Storage"，content.json 使用 {{ModId}}_SingularityChest
-                if (obj.QualifiedItemId == SingularityChestId || obj.ItemId == "Singularity.Storage_SingularityChest")
+                // 在 1.6 中，我们检查 QualifiedItemId
+                // 由于 CP 使用 ModId 作为前缀，我们需要匹配 ItemDefinitions 中的内容
+                // manifest.json 的 ID 是 "Singularity.Storage"，ItemDefinitions 使用正确的 ID
+                if (obj.QualifiedItemId == SingularityChestQualifiedId || obj.ItemId == ItemDefinitions.SingularityChestId)
                 {
                     // 抑制默认动作（可能只是播放声音或晃动）
                     this._helper.Input.Suppress(e.Button);
@@ -58,9 +64,9 @@ namespace SingularityStorage
             
             // 定义升级数值
             var increment = 0;
-            if (item.ItemId == "Singularity.Storage_T1_Comp") increment = 36;
-            else if (item.ItemId == "Singularity.Storage_T2_Comp") increment = 100;
-            else if (item.ItemId == "Singularity.Storage_T3_Comp") increment = 999;
+            if (item.ItemId == ItemDefinitions.UpgradeT1Id) increment = 36;
+            else if (item.ItemId == ItemDefinitions.UpgradeT2Id) increment = 100;
+            else if (item.ItemId == ItemDefinitions.UpgradeT3Id) increment = 999;
             
             if (increment > 0)
             {
