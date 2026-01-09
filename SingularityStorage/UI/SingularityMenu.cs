@@ -33,20 +33,18 @@ namespace SingularityStorage.UI
         
         private string _cachedCapacityText = "";
         
+        private ToolbarComponent _toolbar;
+        
         // 组件
         private CategorySidebar _sidebar;
         private PaginationControl _pagination;
         private InventoryHandler _inventoryHandler;
-
+        
         // UI 控件
         private InventoryMenu _storageInventory;
         private InventoryMenu _playerInventory;
-        private TextBox? _searchBar;
-        private ClickableTextureComponent? _okButton;
-        private ClickableTextureComponent? _fillStacksButton;
         
         // 状态
-        private string _lastSearchText = "";
         private bool _isLoading;
         private Item? _hoverItem;
 
@@ -83,6 +81,8 @@ namespace SingularityStorage.UI
             // 初始化组件
             this._sidebar = new CategorySidebar();
             this._pagination = new PaginationControl(ItemsPerPage);
+            this._toolbar = new ToolbarComponent();
+            
             this._inventoryHandler = new InventoryHandler(
                 guid, 
                 this._storageInventory, 
@@ -94,6 +94,10 @@ namespace SingularityStorage.UI
             // 绑定事件
             this._sidebar.OnFilterChanged += this.ApplyFilters;
             this._pagination.OnPageChanged += this.RefreshView;
+            
+            this._toolbar.OnSearchChanged += (text) => this.ApplyFilters();
+            this._toolbar.OnCloseClicked += this.exitThisMenu;
+            this._toolbar.OnFillStacksClicked += this.FillExistingStacks;
 
             this.InitializeWidgets();
 
@@ -113,64 +117,9 @@ namespace SingularityStorage.UI
 
         private void InitializeWidgets()
         {
-            var headerY = this.yPositionOnScreen + Config.Header.OffsetY;
-
-            // 搜索栏
-            this._searchBar = new TextBox(
-                Game1.content.Load<Texture2D>("LooseSprites\\textBox"), 
-                null, 
-                Game1.smallFont, 
-                Game1.textColor)
-            {
-                X = this.xPositionOnScreen + Config.SearchBar.OffsetX,
-                Y = headerY,
-                Width = Config.SearchBar.Width,
-                Height = Config.SearchBar.Height
-            };
-
-            // 组件初始化
             this._sidebar.Initialize(this.xPositionOnScreen, this.yPositionOnScreen);
             this._pagination.Initialize(this.xPositionOnScreen, this.yPositionOnScreen, Config);
-
-            // 填充堆叠按钮
-            if (Config.FillStacksButton != null)
-            {
-                 var srcRect = new Rectangle(103, 469, 16, 16);
-                 if (Config.FillStacksButton.TextureSource != null)
-                 {
-                     srcRect = new Rectangle(
-                         Config.FillStacksButton.TextureSource.X, 
-                         Config.FillStacksButton.TextureSource.Y, 
-                         Config.FillStacksButton.TextureSource.Width, 
-                         Config.FillStacksButton.TextureSource.Height);
-                 }
-                 
-                 var scale = Config.FillStacksButton.Size / (float)srcRect.Width;
-                 
-                 var buttonX = this.xPositionOnScreen + this.width - Config.FillStacksButton.OffsetFromRight - Config.FillStacksButton.Size;
-                 var buttonY = this.yPositionOnScreen + Config.Header.OffsetY + 8; 
-                 
-                 this._fillStacksButton = new ClickableTextureComponent(
-                    new Rectangle(
-                        buttonX,
-                        buttonY,
-                        Config.FillStacksButton.Size,
-                        Config.FillStacksButton.Size),
-                    Game1.mouseCursors,
-                    srcRect,
-                    scale);
-            }
-
-            // 确认按钮 (OK)
-            this._okButton = new ClickableTextureComponent(
-                new Rectangle(
-                    this.xPositionOnScreen + this.width - Config.OkButton.OffsetFromRight,
-                    this.yPositionOnScreen + this.height - Config.OkButton.OffsetFromBottom,
-                    Config.OkButton.Size,
-                    Config.OkButton.Size),
-                Game1.mouseCursors,
-                Game1.getSourceRectForStandardTileSheet(Game1.mouseCursors, 46),
-                1f);
+            this._toolbar.Initialize(this.xPositionOnScreen, this.yPositionOnScreen, this.width, this.height, Config);
         }
 
         private void RefreshView()
@@ -178,7 +127,7 @@ namespace SingularityStorage.UI
             if (!Context.IsMainPlayer)
             {
                 this._isLoading = true;
-                NetworkManager.SendRequestView(this._sourceGuid, this._pagination.CurrentPage, this._searchBar?.Text ?? "");
+                NetworkManager.SendRequestView(this._sourceGuid, this._pagination.CurrentPage, this._toolbar.SearchText);
                 return;
             }
 
@@ -187,7 +136,7 @@ namespace SingularityStorage.UI
             this._dataSource.UpdateSource(data.Inventory.Values.SelectMany(x => x).Cast<Item?>().ToList());
             
             // 重新应用过滤逻辑
-            var query = this._searchBar?.Text?.Trim() ?? "";
+            var query = this._toolbar.SearchText;
             this._dataSource.ApplyFilter(query, this._sidebar.SelectedGroup, this._sidebar.SelectedSubCategory);
             
             var totalItems = this._dataSource.TotalCount;
@@ -204,21 +153,13 @@ namespace SingularityStorage.UI
 
         private void ApplyFilters()
         {
-            var query = this._searchBar?.Text ?? "";
+            var query = this._toolbar.SearchText;
             this._dataSource.ApplyFilter(query, this._sidebar.SelectedGroup, this._sidebar.SelectedSubCategory);
             this._pagination.ResetPage();
             this.RefreshView();
         }
 
-        private void UpdateSearch()
-        {
-            var query = this._searchBar?.Text?.Trim() ?? "";
-            if (query != this._lastSearchText)
-            {
-                 this._lastSearchText = query;
-                 this.ApplyFilters();
-            }
-        }
+        // UpdateSearch Removed (Logic moved to ToolbarComponent)
         
         private void FillExistingStacks()
         {
@@ -230,17 +171,7 @@ namespace SingularityStorage.UI
             base.receiveLeftClick(x, y, playSound);
 
             // 控件点击处理
-            if (this._okButton != null && this._okButton.containsPoint(x, y))
-            {
-                this.exitThisMenu();
-                return;
-            }
-
-            if (this._fillStacksButton != null && this._fillStacksButton.containsPoint(x, y))
-            {
-                this.FillExistingStacks();
-                return;
-            }
+            if (this._toolbar.HandleLeftClick(x, y)) return;
             
             // 组件点击处理
             if (this._pagination.HandleClick(x, y, this._dataSource.TotalCount)) return;
@@ -266,15 +197,13 @@ namespace SingularityStorage.UI
             this._hoverItem = this._inventoryHandler.CheckForHover(x, y);
 
             this._pagination.PerformHover(x, y);
-            
-            this._okButton?.tryHover(x, y);
-            this._fillStacksButton?.tryHover(x, y);
+            this._toolbar.PerformHover(x, y);
         }
 
         public override void update(GameTime time)
         {
             base.update(time);
-            this.UpdateSearch();
+            this._toolbar.Update(time);
         }
 
         public override void draw(SpriteBatch b)
@@ -288,12 +217,6 @@ namespace SingularityStorage.UI
             // 绘制主菜单对话框背景
             Game1.drawDialogueBox(this.xPositionOnScreen, this.yPositionOnScreen, this.width, this.height, false, true);
 
-            // 绘制标题
-            var title = Config.Title.Text;
-            Utility.drawTextWithShadow(b, title, Game1.dialogueFont, 
-                new Vector2(this.xPositionOnScreen + (this.width - Game1.dialogueFont.MeasureString(title).X) / 2, this.yPositionOnScreen + Config.Title.OffsetY), 
-                Game1.textColor);
-
             // 绘制顶栏背景
             IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(384, 373, 18, 18),
                 this.xPositionOnScreen + Config.Header.Padding, 
@@ -302,13 +225,9 @@ namespace SingularityStorage.UI
                 Config.Header.Height, 
                 Color.White, 4f, false);
 
-            // 绘制控件
-            this._searchBar?.Draw(b);
-            if (this._searchBar != null && string.IsNullOrEmpty(this._searchBar.Text) && !this._searchBar.Selected)
-            {
-                 b.DrawString(Game1.smallFont, Config.SearchBar.Placeholder, new Vector2(this._searchBar.X + 10, this._searchBar.Y + 8), Color.Gray);
-            }
-
+            // 绘制工具栏 (搜索框, 按钮)
+            this._toolbar.Draw(b, Config);
+            
             // 绘制分页控制
             this._pagination.Draw(b, this._dataSource.TotalCount);
 
@@ -326,33 +245,7 @@ namespace SingularityStorage.UI
             // 绘制玩家背包库存
             this._playerInventory.draw(b);
 
-            // 绘制 OK 按钮
-            this._okButton?.draw(b);
 
-            // 绘制“填充堆叠”按钮
-            if (this._fillStacksButton != null)
-            {
-                var isHovered = this._fillStacksButton.containsPoint(Game1.getOldMouseX(), Game1.getOldMouseY());
-                var bgColor = isHovered ? Color.Wheat : Color.White;
-                
-                IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(384, 373, 18, 18),
-                    this._fillStacksButton.bounds.X, this._fillStacksButton.bounds.Y,
-                    this._fillStacksButton.bounds.Width, this._fillStacksButton.bounds.Height,
-                    bgColor, 4f, false);
-                
-                var buttonText = "填充";
-                var textSize = Game1.smallFont.MeasureString(buttonText);
-                var textPos = new Vector2(
-                    this._fillStacksButton.bounds.X + (this._fillStacksButton.bounds.Width - textSize.X) / 2,
-                    this._fillStacksButton.bounds.Y + (this._fillStacksButton.bounds.Height - textSize.Y) / 2);
-                
-                Utility.drawTextWithShadow(b, buttonText, Game1.smallFont, textPos, Game1.textColor);
-                
-                if (isHovered)
-                {
-                    IClickableMenu.drawToolTip(b, "将背包中已存在于箱子的物品全部存入", "填充堆叠", null);
-                }
-            }
 
             // Draw Capacity
             if (!string.IsNullOrEmpty(this._cachedCapacityText))

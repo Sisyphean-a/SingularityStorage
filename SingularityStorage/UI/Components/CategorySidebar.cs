@@ -113,36 +113,79 @@ namespace SingularityStorage.UI.Components
 
         public void Draw(SpriteBatch b)
         {
+            // 获取当前鼠标位置，用于处理悬停高亮
+            int mouseX = Game1.getOldMouseX();
+            int mouseY = Game1.getOldMouseY();
+
+            // ===========================
             // 绘制主标签 (Major Tabs)
+            // ===========================
             foreach (var tab in this.CategoryTabs)
             {
-                 var selected = (tab.name == this.SelectedGroup);
-                 IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(16, 368, 16, 16), 
-                     tab.bounds.X, tab.bounds.Y, tab.bounds.Width, tab.bounds.Height, 
-                     selected ? Color.White : Color.Gray, 4f, false);
-                 
-                 var textSize = Game1.smallFont.MeasureString(tab.name);
-                 var textPos = new Vector2(
-                    tab.bounds.X + (tab.bounds.Width - textSize.X) / 2, 
-                    tab.bounds.Y + (tab.bounds.Height - textSize.Y) / 2 + 4);
-                 b.DrawString(Game1.smallFont, tab.name, textPos, Game1.textColor);
+                var isSelected = (tab.name == this.SelectedGroup);
+                var isHovered = tab.containsPoint(mouseX, mouseY);
+
+                // 1. 绘制背景 (使用扁平色块代替厚重边框)
+                if (isSelected)
+                {
+                    // 选中状态：显示小麦色(Wheat)背景，透明度 60%
+                    b.Draw(Game1.staminaRect, tab.bounds, Color.Wheat * 0.6f);
+                }
+                else if (isHovered)
+                {
+                    // 悬停状态：显示非常淡的背景，提供交互反馈
+                    b.Draw(Game1.staminaRect, tab.bounds, Color.Wheat * 0.2f);
+                }
+
+                // 2. 确定文字颜色
+                // 选中项用深褐色(标准文本色)，未选中项用带阴影的淡色，以此区分层级
+                Color fontColor = isSelected ? Game1.textColor : Game1.textShadowColor;
+
+                // 3. 计算文字居中位置
+                var textSize = Game1.smallFont.MeasureString(tab.name);
+                var textPos = new Vector2(
+                    tab.bounds.X + (tab.bounds.Width - textSize.X) / 2,
+                    tab.bounds.Y + (tab.bounds.Height - textSize.Y) / 2
+                );
+
+                // 4. 绘制文字 (使用带阴影的方法，让文字更清晰立体)
+                Utility.drawTextWithShadow(b, tab.name, Game1.smallFont, textPos, fontColor);
             }
-            
+
+            // ===========================
             // 绘制子标签 (Sub Tabs)
+            // ===========================
             if (this.SelectedGroup != "全部")
             {
                 foreach (var tab in this.SubCategoryTabs)
                 {
-                     var selected = (this.SelectedSubCategory == null && tab.myID == -9999) || (this.SelectedSubCategory == tab.myID);
-                     IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(16, 368, 16, 16), 
-                         tab.bounds.X, tab.bounds.Y, tab.bounds.Width, tab.bounds.Height, 
-                         selected ? Color.White : Color.Gray * 0.9f, 4f, false);
-                         
-                     var textSize = Game1.smallFont.MeasureString(tab.name);
-                     var textPos = new Vector2(
-                        tab.bounds.X + (tab.bounds.Width - textSize.X) / 2, 
-                        tab.bounds.Y + (tab.bounds.Height - textSize.Y) / 2 + 4);
-                     b.DrawString(Game1.smallFont, tab.name, textPos, Game1.textColor);
+                    // 判断是否选中 (特殊处理 "全部" 的 ID: -9999)
+                    var isSelected = (this.SelectedSubCategory == null && tab.myID == -9999) || 
+                                    (this.SelectedSubCategory == tab.myID);
+                    var isHovered = tab.containsPoint(mouseX, mouseY);
+
+                    // 1. 绘制背景
+                    if (isSelected)
+                    {
+                        b.Draw(Game1.staminaRect, tab.bounds, Color.Wheat * 0.6f);
+                    }
+                    else if (isHovered)
+                    {
+                        b.Draw(Game1.staminaRect, tab.bounds, Color.Wheat * 0.2f);
+                    }
+
+                    // 2. 确定文字颜色
+                    Color fontColor = isSelected ? Game1.textColor : Game1.textShadowColor;
+
+                    // 3. 计算文字居中位置
+                    var textSize = Game1.smallFont.MeasureString(tab.name);
+                    var textPos = new Vector2(
+                        tab.bounds.X + (tab.bounds.Width - textSize.X) / 2,
+                        tab.bounds.Y + (tab.bounds.Height - textSize.Y) / 2
+                    );
+
+                    // 4. 绘制文字
+                    Utility.drawTextWithShadow(b, tab.name, Game1.smallFont, textPos, fontColor);
                 }
             }
         }
