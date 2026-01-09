@@ -17,6 +17,7 @@ namespace SingularityStorage.UI
         public SeparatorConfig Separator { get; set; } = new();
         public ButtonConfig OkButton { get; set; } = new();
         public FillStacksButtonConfig? FillStacksButton { get; set; } = new();
+        public StoreAllButtonConfig? StoreAllButton { get; set; } = new();
         public LoadingTextConfig LoadingText { get; set; } = new();
 
         /// <summary>
@@ -124,6 +125,19 @@ namespace SingularityStorage.UI
         public int Y { get; set; } = 469;
         public int Width { get; set; } = 16;
         public int Height { get; set; } = 16;
+    }
+
+    public class StoreAllButtonConfig : ButtonConfig
+    {
+         public TextureSourceConfig? TextureSource { get; set; } = new TextureSourceConfig();
+
+         public StoreAllButtonConfig()
+         {
+             // 位置在填充堆叠按钮左侧
+             OffsetFromRight = 140;
+             OffsetFromBottom = 696;
+             Size = 48;
+         }
     }
 
     public class LoadingTextConfig

@@ -291,5 +291,23 @@ namespace SingularityStorage.UI.Controllers
             Game1.playSound("Ship");
             this._requestRefresh();
         }
+
+        public void StoreAll()
+        {
+            var playerItems = Game1.player.Items.Where(i => i != null).ToList();
+            var changed = false;
+
+            foreach (var pItem in playerItems.OfType<Item>()
+                         .Where(_ => Context.IsMainPlayer))
+            {
+                StorageManager.AddItem(_sourceGuid, pItem);
+                Game1.player.removeItemFromInventory(pItem);
+                changed = true;
+            }
+
+            if (!changed || !Context.IsMainPlayer) return;
+            Game1.playSound("Ship");
+            this._requestRefresh();
+        }
     }
 }

@@ -98,6 +98,7 @@ namespace SingularityStorage.UI
             this._toolbar.OnSearchChanged += (text) => this.ApplyFilters();
             this._toolbar.OnCloseClicked += this.exitThisMenu;
             this._toolbar.OnFillStacksClicked += this.FillExistingStacks;
+            this._toolbar.OnStoreAllClicked += this.StoreAll;
 
             this.InitializeWidgets();
 
@@ -164,6 +165,11 @@ namespace SingularityStorage.UI
         private void FillExistingStacks()
         {
              this._inventoryHandler.FillExistingStacks();
+        }
+
+        private void StoreAll()
+        {
+             this._inventoryHandler.StoreAll();
         }
 
         public override void receiveLeftClick(int x, int y, bool playSound = true)

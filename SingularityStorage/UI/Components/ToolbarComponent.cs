@@ -11,11 +11,13 @@ namespace SingularityStorage.UI.Components
         private TextBox? _searchBar;
         private ClickableTextureComponent? _okButton;
         private ClickableTextureComponent? _fillStacksButton;
+        private ClickableTextureComponent? _storeAllButton;
         private string _lastSearchText = "";
         
         public event Action<string>? OnSearchChanged;
         public event Action? OnCloseClicked;
         public event Action? OnFillStacksClicked;
+        public event Action? OnStoreAllClicked;
 
         // 公开访问器，以便菜单可以设置焦点
         public TextBox? SearchBar => _searchBar;
@@ -77,6 +79,35 @@ namespace SingularityStorage.UI.Components
                 Game1.mouseCursors,
                 Game1.getSourceRectForStandardTileSheet(Game1.mouseCursors, 46),
                 1f);
+
+            // 全部存入按钮
+            if (config.StoreAllButton != null)
+            {
+                 var srcRect = new Rectangle(103, 469, 16, 16);
+                 if (config.StoreAllButton.TextureSource != null)
+                 {
+                     srcRect = new Rectangle(
+                         config.StoreAllButton.TextureSource.X, 
+                         config.StoreAllButton.TextureSource.Y, 
+                         config.StoreAllButton.TextureSource.Width, 
+                         config.StoreAllButton.TextureSource.Height);
+                 }
+                 
+                 var scale = config.StoreAllButton.Size / (float)srcRect.Width;
+                 
+                 var buttonX = x + menuWidth - config.StoreAllButton.OffsetFromRight - config.StoreAllButton.Size;
+                 var buttonY = y + config.Header.OffsetY + 8;
+                 
+                 this._storeAllButton = new ClickableTextureComponent(
+                    new Rectangle(
+                        buttonX,
+                        buttonY,
+                        config.StoreAllButton.Size,
+                        config.StoreAllButton.Size),
+                    Game1.mouseCursors,
+                    srcRect,
+                    scale);
+            }
         }
 
         public void Update(GameTime time)
@@ -100,6 +131,12 @@ namespace SingularityStorage.UI.Components
             if (this._fillStacksButton != null && this._fillStacksButton.containsPoint(x, y))
             {
                 OnFillStacksClicked?.Invoke();
+                return true;
+            }
+
+            if (this._storeAllButton != null && this._storeAllButton.containsPoint(x, y))
+            {
+                OnStoreAllClicked?.Invoke();
                 return true;
             }
             
@@ -166,12 +203,38 @@ namespace SingularityStorage.UI.Components
                     IClickableMenu.drawToolTip(b, "将背包中已存在于箱子的物品全部存入", "填充堆叠", null);
                 }
             }
+
+            // 绘制"全部存入"按钮
+            if (this._storeAllButton != null)
+            {
+                var isHovered = this._storeAllButton.containsPoint(Game1.getOldMouseX(), Game1.getOldMouseY());
+                var bgColor = isHovered ? Color.Wheat : Color.White;
+                
+                IClickableMenu.drawTextureBox(b, Game1.mouseCursors, new Rectangle(384, 373, 18, 18),
+                    this._storeAllButton.bounds.X, this._storeAllButton.bounds.Y,
+                    this._storeAllButton.bounds.Width, this._storeAllButton.bounds.Height,
+                    bgColor, 4f, false);
+                
+                var buttonText = "全存";
+                var textSize = Game1.smallFont.MeasureString(buttonText);
+                var textPos = new Vector2(
+                    this._storeAllButton.bounds.X + (this._storeAllButton.bounds.Width - textSize.X) / 2,
+                    this._storeAllButton.bounds.Y + (this._storeAllButton.bounds.Height - textSize.Y) / 2);
+                
+                Utility.drawTextWithShadow(b, buttonText, Game1.smallFont, textPos, Game1.textColor);
+                
+                if (isHovered)
+                {
+                    IClickableMenu.drawToolTip(b, "将背包中所有物品存入箱子", "全部存入", null);
+                }
+            }
         }
 
         public void PerformHover(int x, int y)
         {
             this._okButton?.tryHover(x, y);
             this._fillStacksButton?.tryHover(x, y);
+            this._storeAllButton?.tryHover(x, y);
             this._searchBar?.Hover(x, y);
         }
     }
